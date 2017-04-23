@@ -1,5 +1,5 @@
 
-## NER Tagger in Tensorflow
+## Neural NER Tagger in Tensorflow
 
 This is an implementation of Lample et al. (2016) in Tensorflow which borrows several utility functions
 from [their implementation](https://github.com/glample/tagger).
