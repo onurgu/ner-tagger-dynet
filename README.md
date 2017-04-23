@@ -4,6 +4,8 @@
 This is an implementation of Lample et al. (2016) (see [1]) in Tensorflow which borrows several utility functions
 from [their implementation](https://github.com/glample/tagger).
 
+The main technical advantage is that it works in batches and inspection of the model parameters and the outputs can be done easier through adding Summary operations.  
+
 The model is basically a Bi-LSTM based sequence tagger which can utilize several sources of information about
 each word unit like word embeddings, character based embeddings and capitalization features to obtain
 the representation for that specific word unit. The model does not rely on any external data other
