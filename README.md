@@ -1,7 +1,7 @@
 
-## Neural NER Tagger in Tensorflow
+# Neural NER Tagger in Tensorflow
 
-This is an implementation of Lample et al. (2016) in Tensorflow which borrows several utility functions
+This is an implementation of Lample et al. (2016) (see [1]) in Tensorflow which borrows several utility functions
 from [their implementation](https://github.com/glample/tagger).
 
 The model is basically a Bi-LSTM based sequence tagger which can utilize several sources of information about
@@ -48,3 +48,7 @@ python eval_tensorflow.py --pre_emb we-300.txt \
 This project do not have a designated tagger script for now but you can use eval_tensorflow.py script
 to obtain the output in `eval_dir`. You should provide the text in tokenized form in CoNLL format.
 The script will tag both the development and testing files and produce files in `eval_dir`.
+
+## References
+
+[1] Lample, G., Ballesteros, M., Subramanian, S., Kawakami, K., & Dyer, C. (2016). Neural Architectures for Named Entity Recognition. In Proceedings of NAACL-HLT (pp. 260-270).
