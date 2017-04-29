@@ -239,18 +239,21 @@ def eval_once():
             for bucket_id in range(len(dataset_buckets)):
 
                 # bucket_id = np.random.random_integers(0, len(train_bins)-1)
-                bucket_data = dataset_buckets[bucket_id][0]
+                bucket_data_dict = dataset_buckets[bucket_id][0]
                 bucket_maxes = dataset_buckets[bucket_id][1]
 
-                n_batches = int(math.ceil(float(bucket_data['sentence_lengths'].shape[0]) / batch_size))
+                n_batches = int(math.ceil(float(bucket_data_dict['sentence_lengths'].shape[0]) / batch_size))
 
                 print "dataset_label: %s" % dataset_label
                 print ("n_batches: %d" % n_batches)
                 print ("bucket_id: %d" % bucket_id)
 
+                import Queue
+                str_words_q = Queue.Queue()
                 def load_and_enqueue():
-                    _load_and_enqueue(sess, bucket_data, n_batches, batch_size, placeholders,
+                    _load_and_enqueue(sess, bucket_data_dict, n_batches, batch_size, placeholders,
                                       enqueue_op,
+                                      str_words_q,
                                       train=False)
 
                 t = threading.Thread(target=load_and_enqueue)
@@ -264,11 +267,14 @@ def eval_once():
                     tag_scores_value, tag_ids_value, word_ids_value, sentence_lengths_value = \
                         sess.run([tag_scores, tag_ids, word_ids, sentence_lengths])
 
-                    for sentence_idx, one_sentence in enumerate(tag_scores_value):
+                    str_words = str_words_q.get()
+
+                    for sentence_idx, (tag_scores_of_one_sentence, str_words_of_one_sentence) in \
+                            enumerate(zip(tag_scores_value, str_words)):
                         sentence_length = sentence_lengths_value[sentence_idx]
                         # print sentence_idx
                         # print one_sentence[:sentence_length]
-                        decoded_tags, _ = viterbi_decode(one_sentence[:sentence_length], crf_transition_params.eval())
+                        decoded_tags, _ = viterbi_decode(tag_scores_of_one_sentence[:sentence_length], crf_transition_params.eval())
 
                         p_tags = [id_to_tag[p_tag] for p_tag in decoded_tags]
                         r_tags = [id_to_tag[p_tag] for p_tag in tag_ids_value[sentence_idx, :sentence_length]]
@@ -277,11 +283,14 @@ def eval_once():
                             p_tags = iobes_iob(p_tags)
                             r_tags = iobes_iob(r_tags)
                         for i, (word_id, y_pred, y_real) in enumerate(zip(word_ids_value[sentence_idx, :sentence_length], decoded_tags, tag_ids_value[sentence_idx, :sentence_length])):
-                            new_line = " ".join([id_to_word[word_id]] + [r_tags[i], p_tags[i]])
+                            new_line = " ".join([str_words_of_one_sentence[i]] + [r_tags[i], p_tags[i]])
                             predictions.append(new_line)
                             count[y_real, y_pred] += 1
                         predictions.append("")
 
+                    str_words_q.task_done()
+
+                str_words_q.join()
                 t.join()
 
             # print predictions

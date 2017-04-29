@@ -217,7 +217,7 @@ for epoch in xrange(n_epochs):
 
         def load_and_enqueue():
             _load_and_enqueue(sess, bucket_data, n_batches, batch_size, placeholders,
-                                                       enqueue_op,
+                                                       enqueue_op, None,
                                                       train=True)
 
         t = threading.Thread(target=load_and_enqueue)

@@ -230,13 +230,15 @@ def prepare_dataset(sentences, word_to_id, char_to_id, tag_to_id,
                  max_word_length]
         logging.info("%s" % maxes)
         n_samples_in_the_bucket = len(data_to_be_bucketed)
-        words_ar = np.zeros((n_samples_in_the_bucket, global_max_sentence_length))
-        chars_ar = np.zeros((n_samples_in_the_bucket, global_max_sentence_length, global_max_char_length))
-        char_lengths_ar = np.zeros((n_samples_in_the_bucket, global_max_sentence_length))
-        caps_ar = np.zeros((n_samples_in_the_bucket, global_max_sentence_length))
-        tags_ar = np.zeros((n_samples_in_the_bucket, global_max_sentence_length))
-        sentence_lengths_ar = np.zeros((n_samples_in_the_bucket,))
-        arrays_and_labels = [[words_ar, 'word_ids'],
+        str_words_ar = ['']*n_samples_in_the_bucket
+        words_ar = np.zeros((n_samples_in_the_bucket, global_max_sentence_length), dtype=np.int32)
+        chars_ar = np.zeros((n_samples_in_the_bucket, global_max_sentence_length, global_max_char_length), dtype=np.int32)
+        char_lengths_ar = np.zeros((n_samples_in_the_bucket, global_max_sentence_length), dtype=np.int32)
+        caps_ar = np.zeros((n_samples_in_the_bucket, global_max_sentence_length), dtype=np.int32)
+        tags_ar = np.zeros((n_samples_in_the_bucket, global_max_sentence_length), dtype=np.int32)
+        sentence_lengths_ar = np.zeros((n_samples_in_the_bucket,), dtype=np.int32)
+        arrays_and_labels = [[str_words_ar, 'str_words'],
+                             [words_ar, 'word_ids'],
                              [chars_ar, 'char_for_ids'],
                              [char_lengths_ar, 'char_lengths'],
                              [caps_ar, 'cap_ids'],
@@ -248,7 +250,9 @@ def prepare_dataset(sentences, word_to_id, char_to_id, tag_to_id,
             for arr, label in arrays_and_labels:
                 # logging.info("Label: %s" % label)
                 # print d[label]
-                if len(arr.shape) == 2:
+                if label == "str_words":
+                    arr[i] = d[label]
+                elif len(arr.shape) == 2:
                     arr[i,:(len(d[label]))] = d[label]
                 elif len(arr.shape) == 3:
                     subarray_shape = arr[i,].shape
@@ -264,73 +268,75 @@ def prepare_dataset(sentences, word_to_id, char_to_id, tag_to_id,
 
     return buckets, stats, n_unique_words
 
-def _load_and_enqueue(sess, bucket_data, n_batches, batch_size_scalar, placeholders, enqueue_op,
+def read_an_example(_bucket_data_dict, batch_idx, batch_size_scalar, n_sentences):
+    given_placeholders = {}
+    # print batch_idx
+    # print batch_size_scalar
+    for key in _bucket_data_dict.keys():
+        if key in ["max_sentence_length", "max_word_length"]:
+            continue
+
+        lower_index = batch_idx * batch_size_scalar
+        upper_index = min((batch_idx + 1) * batch_size_scalar, n_sentences)
+        if key == "str_words":
+            str_words = _bucket_data_dict[key][lower_index:upper_index]
+        else:
+            if _bucket_data_dict[key].ndim > 1:
+                given_placeholders[key] = _bucket_data_dict[key][np.arange(lower_index, upper_index), :]
+            else:
+                # print data[key].shape
+                given_placeholders[key] = _bucket_data_dict[key][np.arange(lower_index, upper_index)]
+
+            # if the size of this slice is smaller than the batch_size_scalar
+            for i in range(batch_size_scalar-(upper_index-lower_index)):
+                if given_placeholders[key].ndim > 1:
+                    row_to_be_duplicated = given_placeholders[key][0, :]
+                    # print "n_sentences: %d" % n_sentences
+                    # print key
+                    # print ret_dict[key].shape
+                    # print row_to_be_duplicated.shape
+                    # print np.expand_dims(row_to_be_duplicated, axis=0).shape
+                    given_placeholders[key] = np.concatenate(
+                        [given_placeholders[key], np.expand_dims(row_to_be_duplicated, axis=0)])
+                else:
+                    row_to_be_duplicated = given_placeholders[key][0]
+                    # print "n_sentences: %d" % n_sentences
+                    # print key
+                    # print ret_dict[key].shape
+                    # print row_to_be_duplicated.shape
+                    # print np.expand_dims(row_to_be_duplicated, axis=0).shape
+                    given_placeholders[key] = np.concatenate([given_placeholders[key], np.expand_dims(row_to_be_duplicated, axis=0)])
+
+    # for key in ret_dict.keys():
+    #     print key
+    #     print ret_dict[key].shape
+
+    return given_placeholders, str_words
+
+def _load_and_enqueue(sess, bucket_data_dict, n_batches, batch_size_scalar, placeholders, enqueue_op, str_words_q,
                       train=True):
 
     # TODO: shuffle the bucket_data here.
 
-    n_sentences = len(bucket_data["sentence_lengths"])
+    n_sentences = len(bucket_data_dict["sentence_lengths"])
 
     if train:
         new_indices = np.random.permutation(n_sentences)
 
         print "Reshuffling"
-        for key in bucket_data.keys():
+        for key in bucket_data_dict.keys():
             if key in ["max_sentence_length", "max_word_length"]:
                 continue
-            if bucket_data[key].ndim > 1:
-                bucket_data[key] = bucket_data[key][new_indices, :]
+            if key == "str_words":
+                bucket_data_dict[key] = [bucket_data_dict[key][i] for i in new_indices]
+            elif bucket_data_dict[key].ndim > 1:
+                bucket_data_dict[key] = bucket_data_dict[key][new_indices, :]
             else:
-                bucket_data[key] = bucket_data[key][new_indices]
-
-    def read_an_example(data, batch_idx):
-        ret_dict = {}
-        # print batch_idx
-        # print batch_size_scalar
-        for key in data.keys():
-            if key in ["max_sentence_length", "max_word_length"]:
-                continue
-            # else:
-            #     print "processing: %s" % key
-            # try:
-            # print data[key].shape
-            # except AttributeError as e:
-            #     print e
-            lower_index = batch_idx * batch_size_scalar
-            upper_index = min((batch_idx + 1) * batch_size_scalar, n_sentences)
-            if data[key].ndim > 1:
-                ret_dict[key] = data[key][np.arange(lower_index, upper_index), :]
-            else:
-                # print data[key].shape
-                ret_dict[key] = data[key][np.arange(lower_index, upper_index)]
-            for i in range(batch_size_scalar-(upper_index-lower_index)):
-                if ret_dict[key].ndim > 1:
-                    row_to_be_duplicated = ret_dict[key][0, :]
-                    # print "n_sentences: %d" % n_sentences
-                    # print key
-                    # print ret_dict[key].shape
-                    # print row_to_be_duplicated.shape
-                    # print np.expand_dims(row_to_be_duplicated, axis=0).shape
-                    ret_dict[key] = np.concatenate(
-                        [ret_dict[key], np.expand_dims(row_to_be_duplicated, axis=0)])
-                else:
-                    row_to_be_duplicated = ret_dict[key][0]
-                    # print "n_sentences: %d" % n_sentences
-                    # print key
-                    # print ret_dict[key].shape
-                    # print row_to_be_duplicated.shape
-                    # print np.expand_dims(row_to_be_duplicated, axis=0).shape
-                    ret_dict[key] = np.concatenate([ret_dict[key], np.expand_dims(row_to_be_duplicated, axis=0)])
-
-        # for key in ret_dict.keys():
-        #     print key
-        #     print ret_dict[key].shape
-
-        return ret_dict
+                bucket_data_dict[key] = bucket_data_dict[key][new_indices]
 
     for i in range(n_batches):
-        given_placeholders = \
-            read_an_example(bucket_data, i)
+        given_placeholders, str_words = \
+            read_an_example(bucket_data_dict, i, batch_size_scalar, n_sentences)
 
         given_placeholders['is_train'] = train
 
@@ -342,6 +348,9 @@ def _load_and_enqueue(sess, bucket_data, n_batches, batch_size_scalar, placehold
         feed_dict = {placeholders[key]: given_placeholders[key] for key in placeholders.keys()}
 
         sess.run(enqueue_op, feed_dict=feed_dict)
+
+        if str_words_q:
+            str_words_q.put(str_words)
 
 
 def augment_with_pretrained(dictionary, ext_emb_path, words):
