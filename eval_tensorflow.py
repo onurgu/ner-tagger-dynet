@@ -111,17 +111,17 @@ if opts.overwrite_mappings:
 model.reload_mappings()
 
 # Index data
-train_bins, train_stats, train_unique_words = prepare_dataset(
+train_buckets, train_stats, train_unique_words = prepare_dataset(
     train_sentences, word_to_id, char_to_id, tag_to_id,
     global_max_sentence_length, global_max_char_length,
     lower
 )
-dev_bins, dev_stats, dev_unique_words = prepare_dataset(
+dev_buckets, dev_stats, dev_unique_words = prepare_dataset(
     dev_sentences, word_to_id, char_to_id, tag_to_id,
     global_max_sentence_length, global_max_char_length,
     lower
 )
-test_bins, test_stats, test_unique_words = prepare_dataset(
+test_buckets, test_stats, test_unique_words = prepare_dataset(
     test_sentences, word_to_id, char_to_id, tag_to_id,
     global_max_sentence_length, global_max_char_length,
     lower
@@ -227,7 +227,7 @@ def eval_once():
         import threading
         from loader import _load_and_enqueue
 
-        for dataset_label, dataset_buckets in [["dev", dev_bins], ["test", test_bins]]:
+        for dataset_label, dataset_buckets in [["dev", dev_buckets], ["test", test_buckets]]:
 
             print "Starting to evaluate %s dataset" % dataset_label
             predictions = []

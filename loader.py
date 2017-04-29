@@ -212,37 +212,37 @@ def prepare_dataset(sentences, word_to_id, char_to_id, tag_to_id,
             n_unique_words.add(word_id)
     n_unique_words = len(n_unique_words)
 
-    n_bins = min([9, len(sentences)])
+    n_buckets = min([9, len(sentences)])
     print "n_sentences: %d" % len(sentences)
-    n_samples_to_be_binned = len(sentences)/n_bins
+    n_samples_to_be_bucketed = len(sentences)/n_buckets
 
-    print "n_samples_to_be_binned: %d" % n_samples_to_be_binned
+    print "n_samples_to_be_binned: %d" % n_samples_to_be_bucketed
 
-    bins = []
-    for bin_idx in range(n_bins+1):
+    buckets = []
+    for bin_idx in range(n_buckets+1):
         logging.info("Forming bin %d.." % bin_idx)
-        data_to_be_binned = data_sorted_by_sentence_length[n_samples_to_be_binned*(bin_idx):n_samples_to_be_binned*(bin_idx+1)]
-        if len(data_to_be_binned) == 0:
+        data_to_be_bucketed = data_sorted_by_sentence_length[n_samples_to_be_bucketed*(bin_idx):n_samples_to_be_bucketed*(bin_idx+1)]
+        if len(data_to_be_bucketed) == 0:
             continue
-        max_sentence_length = data_to_be_binned[-1]['sentence_lengths']
-        max_word_length = max([x['max_word_length_in_this_sample'] for x in data_to_be_binned])
+        max_sentence_length = data_to_be_bucketed[-1]['sentence_lengths']
+        max_word_length = max([x['max_word_length_in_this_sample'] for x in data_to_be_bucketed])
         maxes = [max_sentence_length,
                  max_word_length]
         logging.info("%s" % maxes)
-        n_samples_in_the_bin = len(data_to_be_binned)
-        words_ar = np.zeros((n_samples_in_the_bin, global_max_sentence_length))
-        chars_ar = np.zeros((n_samples_in_the_bin, global_max_sentence_length, global_max_char_length))
-        char_lengths_ar = np.zeros((n_samples_in_the_bin, global_max_sentence_length))
-        caps_ar = np.zeros((n_samples_in_the_bin, global_max_sentence_length))
-        tags_ar = np.zeros((n_samples_in_the_bin, global_max_sentence_length))
-        sentence_lengths_ar = np.zeros((n_samples_in_the_bin,))
+        n_samples_in_the_bucket = len(data_to_be_bucketed)
+        words_ar = np.zeros((n_samples_in_the_bucket, global_max_sentence_length))
+        chars_ar = np.zeros((n_samples_in_the_bucket, global_max_sentence_length, global_max_char_length))
+        char_lengths_ar = np.zeros((n_samples_in_the_bucket, global_max_sentence_length))
+        caps_ar = np.zeros((n_samples_in_the_bucket, global_max_sentence_length))
+        tags_ar = np.zeros((n_samples_in_the_bucket, global_max_sentence_length))
+        sentence_lengths_ar = np.zeros((n_samples_in_the_bucket,))
         arrays_and_labels = [[words_ar, 'word_ids'],
                              [chars_ar, 'char_for_ids'],
                              [char_lengths_ar, 'char_lengths'],
                              [caps_ar, 'cap_ids'],
                              [tags_ar, 'tag_ids'],
                              [sentence_lengths_ar, 'sentence_lengths']]
-        for i, d in enumerate(data_to_be_binned):
+        for i, d in enumerate(data_to_be_bucketed):
             if i % 100 == 0:
                 logging.info("Sample %d is being binned" % i)
             for arr, label in arrays_and_labels:
@@ -257,12 +257,12 @@ def prepare_dataset(sentences, word_to_id, char_to_id, tag_to_id,
                 else:
                     arr[i] = d[label]
 
-        bin_data_dict = {label: arr for arr, label in arrays_and_labels}
-        bin_data_dict['max_sentence_length'] = max_sentence_length
-        bin_data_dict['max_word_length'] = max_word_length
-        bins.append((bin_data_dict, maxes))
+        bucket_data_dict = {label: arr for arr, label in arrays_and_labels}
+        bucket_data_dict['max_sentence_length'] = max_sentence_length
+        bucket_data_dict['max_word_length'] = max_word_length
+        buckets.append((bucket_data_dict, maxes))
 
-    return bins, stats, n_unique_words
+    return buckets, stats, n_unique_words
 
 def _load_and_enqueue(sess, bucket_data, n_batches, batch_size_scalar, placeholders, enqueue_op,
                       train=True):

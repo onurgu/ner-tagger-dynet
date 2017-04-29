@@ -92,17 +92,17 @@ dico_chars, char_to_id, id_to_char = char_mapping(train_sentences)
 dico_tags, tag_to_id, id_to_tag = tag_mapping(train_sentences)
 
 # Index data
-train_bins, train_stats, train_unique_words = prepare_dataset(
+train_buckets, train_stats, train_unique_words = prepare_dataset(
     train_sentences, word_to_id, char_to_id, tag_to_id,
     global_max_sentence_length, global_max_char_length,
     lower
 )
-dev_bins, dev_stats, dev_unique_words = prepare_dataset(
+dev_buckets, dev_stats, dev_unique_words = prepare_dataset(
     dev_sentences, word_to_id, char_to_id, tag_to_id,
     global_max_sentence_length, global_max_char_length,
     lower
 )
-test_bins, test_stats, test_unique_words = prepare_dataset(
+test_buckets, test_stats, test_unique_words = prepare_dataset(
     test_sentences, word_to_id, char_to_id, tag_to_id,
     global_max_sentence_length, global_max_char_length,
     lower
@@ -136,13 +136,14 @@ for i, label in [[2, 'char']]:
 print "Max. sentence lengths: %s" % max_sentence_lengths
 print "Max. char lengths: %s" % max_word_lengths
 
-for label, bin_stats, n_unique_words in [['train', train_stats, train_unique_words],
-                                         ['dev', dev_stats, dev_unique_words],
-                                         ['test', test_stats, test_unique_words]]:
+for label, bucket_stats, n_unique_words in [['train', train_stats, train_unique_words],
+                                            ['dev', dev_stats, dev_unique_words],
+                                            ['test', test_stats, test_unique_words]]:
 
     int32_items = len(train_stats) * (max_sentence_lengths[label] * ( 5 + max_word_lengths[label] ) + 1)
     float32_items = n_unique_words * parameters['word_dim']
     total_size = int32_items + float32_items
+    # TODO: fix this with byte sizes
     logging.info("Input ids size of the %s dataset is %d" % (label, int32_items))
     logging.info("Word embeddings (unique: %d) size of the %s dataset is %d" % (n_unique_words, label, float32_items))
     logging.info("Total size of the %s dataset is %d" % (label, total_size))
@@ -204,13 +205,13 @@ for epoch in xrange(n_epochs):
     import threading
     from loader import _load_and_enqueue
 
-    permuted_bucket_ids = np.random.permutation(range(len(train_bins)))
+    permuted_bucket_ids = np.random.permutation(range(len(train_buckets)))
 
     for bucket_id in list(permuted_bucket_ids):
 
     # bucket_id = np.random.random_integers(0, len(train_bins)-1)
-        bucket_data = train_bins[bucket_id][0]
-        bucket_maxes = train_bins[bucket_id][1]
+        bucket_data = train_buckets[bucket_id][0]
+        bucket_maxes = train_buckets[bucket_id][1]
 
         n_batches = int(math.ceil(float(bucket_data['sentence_lengths'].shape[0]) / batch_size))
 
