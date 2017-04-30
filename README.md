@@ -18,9 +18,9 @@ You can use the '--reload' option to resume the training.
 
 ```
 python train_tensorflow.py --pre_emb we-300.txt \
---train dataset/train \
---dev dataset/dev \
---test dataset/test \
+--train dataset/train.conll \
+--dev dataset/dev.conll \
+--test dataset/test.conll \
 --word_dim 300 --word_lstm_dim 200 --word_bidirect 1 \
 --cap_dim 100 \
 --crf 1 \
