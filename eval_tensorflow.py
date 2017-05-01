@@ -31,7 +31,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("eval")
 
 # Read parameters from command line
-opts = read_args()
+opts = read_args(evaluation=True)
 
 # Parse parameters
 parameters = form_parameters_dict(opts)
@@ -193,8 +193,7 @@ tf.app.flags.DEFINE_integer('num_examples', 10000,
 tf.app.flags.DEFINE_boolean('run_once', False,
                          """Whether to run eval only once.""")
 
-
-def eval_once():
+def eval_once(run_for_all_checkpoints=False):
     """Run Eval once.
 
     Args:
@@ -211,104 +210,121 @@ def eval_once():
         model.saver = tf.train.Saver(pad_step_number=True, keep_checkpoint_every_n_hours=6,
                                      max_to_keep=200)
         ckpt = tf.train.get_checkpoint_state(FLAGS.checkpoint_dir)
-        if ckpt and ckpt.model_checkpoint_path:
-            # Restores from checkpoint
-            model.saver.restore(sess, ckpt.model_checkpoint_path)
-            print "Evaluating %s" % ckpt.model_checkpoint_path
-            # Assuming model_checkpoint_path looks something like:
-            #   /my-favorite-path/cifar10_train/model.ckpt-0,
-            # extract global_step from it.
-            global_step = int(os.path.basename(ckpt.model_checkpoint_path).split('-')[-1])
-            # global_step = ckpt.model_checkpoint_path.split('/')[-1].split('-')[-1]
-        else:
-            print('No checkpoint file found')
-            return
+        if ckpt:
+            if run_for_all_checkpoints:
+                for model_checkpoint_path in ckpt.all_model_checkpoint_paths:
+                    eval_for_a_checkpoint(sess, model_checkpoint_path)
+            else:
+                eval_for_a_checkpoint(sess, ckpt.model_checkpoint_path)
 
-        import threading
-        from loader import _load_and_enqueue
 
-        for dataset_label, dataset_buckets in [["dev", dev_buckets], ["test", test_buckets]]:
+def eval_for_a_checkpoint(sess, model_checkpoint_path):
+    if model_checkpoint_path:
+        # Restores from checkpoint
+        model.saver.restore(sess, model_checkpoint_path)
+        print "Evaluating %s" % model_checkpoint_path
+        # Assuming model_checkpoint_path looks something like:
+        #   /my-favorite-path/cifar10_train/model.ckpt-0,
+        # extract global_step from it.
+        epoch = int(os.path.basename(model_checkpoint_path).split('-')[-1])
+        # global_step = ckpt.model_checkpoint_path.split('/')[-1].split('-')[-1]
+    else:
+        print('No checkpoint file found')
+        return
 
-            print "Starting to evaluate %s dataset" % dataset_label
-            predictions = []
-            n_tags = len(id_to_tag)
-            count = np.zeros((n_tags, n_tags), dtype=np.int32)
+    import threading
+    from loader import _load_and_enqueue
 
-            # permuted_bucket_ids = np.random.permutation(range(len(dataset_buckets)))
+    for dataset_label, dataset_buckets in [["dev", dev_buckets], ["test", test_buckets]]:
 
-            for bucket_id in range(len(dataset_buckets)):
+        print "Starting to evaluate %s dataset" % dataset_label
+        predictions = []
+        n_tags = len(id_to_tag)
+        count = np.zeros((n_tags, n_tags), dtype=np.int32)
 
-                # bucket_id = np.random.random_integers(0, len(train_bins)-1)
-                bucket_data_dict = dataset_buckets[bucket_id][0]
-                bucket_maxes = dataset_buckets[bucket_id][1]
+        # permuted_bucket_ids = np.random.permutation(range(len(dataset_buckets)))
 
-                n_batches = int(math.ceil(float(bucket_data_dict['sentence_lengths'].shape[0]) / batch_size))
+        for bucket_id in range(len(dataset_buckets)):
 
-                print "dataset_label: %s" % dataset_label
-                print ("n_batches: %d" % n_batches)
-                print ("bucket_id: %d" % bucket_id)
+            # bucket_id = np.random.random_integers(0, len(train_bins)-1)
+            bucket_data_dict = dataset_buckets[bucket_id][0]
+            bucket_maxes = dataset_buckets[bucket_id][1]
 
-                import Queue
-                str_words_q = Queue.Queue()
-                def load_and_enqueue():
-                    _load_and_enqueue(sess, bucket_data_dict, n_batches, batch_size, placeholders,
-                                      enqueue_op,
-                                      str_words_q,
-                                      train=False)
+            n_batches = int(
+                math.ceil(float(bucket_data_dict['sentence_lengths'].shape[0]) / batch_size))
 
-                t = threading.Thread(target=load_and_enqueue)
-                t.start()
+            print "dataset_label: %s" % dataset_label
+            print ("n_batches: %d" % n_batches)
+            print ("bucket_id: %d" % bucket_id)
 
-                for batch_idx in range(n_batches):
-                    # print("batch_idx: %d" % batch_idx)
-                    sys.stdout.write(". ")
-                    sys.stdout.flush()
+            import Queue
+            str_words_q = Queue.Queue()
 
-                    tag_scores_value, tag_ids_value, word_ids_value, sentence_lengths_value = \
-                        sess.run([tag_scores, tag_ids, word_ids, sentence_lengths])
+            def load_and_enqueue():
+                _load_and_enqueue(sess, bucket_data_dict, n_batches, batch_size, placeholders,
+                                  enqueue_op,
+                                  str_words_q,
+                                  train=False)
 
-                    str_words = str_words_q.get()
+            t = threading.Thread(target=load_and_enqueue)
+            t.start()
 
-                    for sentence_idx, (tag_scores_of_one_sentence, str_words_of_one_sentence) in \
-                            enumerate(zip(tag_scores_value, str_words)):
-                        sentence_length = sentence_lengths_value[sentence_idx]
-                        # print sentence_idx
-                        # print one_sentence[:sentence_length]
-                        decoded_tags, _ = viterbi_decode(tag_scores_of_one_sentence[:sentence_length], crf_transition_params.eval())
+            for batch_idx in range(n_batches):
+                # print("batch_idx: %d" % batch_idx)
+                sys.stdout.write(". ")
+                sys.stdout.flush()
 
-                        p_tags = [id_to_tag[p_tag] for p_tag in decoded_tags]
-                        r_tags = [id_to_tag[p_tag] for p_tag in tag_ids_value[sentence_idx, :sentence_length]]
+                tag_scores_value, tag_ids_value, word_ids_value, sentence_lengths_value = \
+                    sess.run([tag_scores, tag_ids, word_ids, sentence_lengths])
 
-                        if parameters['t_s'] == 'iobes':
-                            p_tags = iobes_iob(p_tags)
-                            r_tags = iobes_iob(r_tags)
-                        for i, (word_id, y_pred, y_real) in enumerate(zip(word_ids_value[sentence_idx, :sentence_length], decoded_tags, tag_ids_value[sentence_idx, :sentence_length])):
-                            new_line = " ".join([str_words_of_one_sentence[i]] + [r_tags[i], p_tags[i]])
-                            predictions.append(new_line)
-                            count[y_real, y_pred] += 1
-                        predictions.append("")
+                str_words = str_words_q.get()
 
-                    str_words_q.task_done()
+                for sentence_idx, (tag_scores_of_one_sentence, str_words_of_one_sentence) in \
+                        enumerate(zip(tag_scores_value, str_words)):
+                    sentence_length = sentence_lengths_value[sentence_idx]
+                    # print sentence_idx
+                    # print one_sentence[:sentence_length]
+                    decoded_tags, _ = viterbi_decode(tag_scores_of_one_sentence[:sentence_length],
+                                                     crf_transition_params.eval())
 
-                str_words_q.join()
-                t.join()
+                    p_tags = [id_to_tag[p_tag] for p_tag in decoded_tags]
+                    r_tags = [id_to_tag[p_tag] for p_tag in
+                              tag_ids_value[sentence_idx, :sentence_length]]
 
-            # print predictions
+                    if parameters['t_s'] == 'iobes':
+                        p_tags = iobes_iob(p_tags)
+                        r_tags = iobes_iob(r_tags)
+                    for i, (word_id, y_pred, y_real) in enumerate(
+                            zip(word_ids_value[sentence_idx, :sentence_length], decoded_tags,
+                                tag_ids_value[sentence_idx, :sentence_length])):
+                        new_line = " ".join([str_words_of_one_sentence[i]] + [r_tags[i], p_tags[i]])
+                        predictions.append(new_line)
+                        count[y_real, y_pred] += 1
+                    predictions.append("")
 
-            # Write predictions to disk and run CoNLL script externally
-            eval_id = np.random.randint(1000000, 2000000)
-            output_path = os.path.join(FLAGS.eval_dir, "eval.%i.output" % eval_id)
-            scores_path = os.path.join(FLAGS.eval_dir, "eval.%i.scores" % eval_id)
-            with codecs.open(output_path, 'w', 'utf8') as f:
-                f.write("\n".join(predictions))
+                str_words_q.task_done()
 
-            print "Evaluating the %s dataset with conlleval script" % dataset_label
-            os.system("%s < %s > %s" % (eval_script, output_path, scores_path))
+            str_words_q.join()
+            t.join()
 
-            # CoNLL evaluation results
-            eval_lines = [l.rstrip() for l in codecs.open(scores_path, 'r', 'utf8')]
-            for line in eval_lines:
-                print line
+        # print predictions
+
+        # Write predictions to disk and run CoNLL script externally
+        eval_id = np.random.randint(1000000, 2000000)
+        output_path = os.path.join(FLAGS.eval_dir,
+                                   "%s.eval.%i.epoch-%04d.output" % (dataset_label, eval_id, epoch))
+        scores_path = os.path.join(FLAGS.eval_dir,
+                                   "%s.eval.%i.epoch-%04d.scores" % (dataset_label, eval_id, epoch))
+        with codecs.open(output_path, 'w', 'utf8') as f:
+            f.write("\n".join(predictions))
+
+        print "Evaluating the %s dataset with conlleval script" % dataset_label
+        os.system("%s < %s > %s" % (eval_script, output_path, scores_path))
+
+        # CoNLL evaluation results
+        eval_lines = [l.rstrip() for l in codecs.open(scores_path, 'r', 'utf8')]
+        for line in eval_lines:
+            print line
 
 
 def evaluate():
@@ -324,8 +340,8 @@ def evaluate():
   # summary_writer = tf.summary.FileWriter(FLAGS.eval_dir, g)
 
   while True:
-    eval_once()
-    if FLAGS.run_once:
+    eval_once(run_for_all_checkpoints=bool(opts.run_for_all_checkpoints))
+    if FLAGS.run_once or opts.run_for_all_checkpoints:
       break
     print "Sleeping for %d" % FLAGS.eval_interval_secs
     time.sleep(FLAGS.eval_interval_secs)
@@ -333,9 +349,9 @@ def evaluate():
 
 def main(argv=None):  # pylint: disable=unused-argument
 
-  if tf.gfile.Exists(FLAGS.eval_dir):
-    tf.gfile.DeleteRecursively(FLAGS.eval_dir)
-  tf.gfile.MakeDirs(FLAGS.eval_dir)
+  # if tf.gfile.Exists(FLAGS.eval_dir):
+  #   tf.gfile.DeleteRecursively(FLAGS.eval_dir)
+  # tf.gfile.MakeDirs(FLAGS.eval_dir)
   evaluate()
 
 

@@ -281,7 +281,7 @@ def evaluate(parameters, f_eval, raw_sentences, parsed_sentences,
     return float(eval_lines[1].strip().split()[-1])
 
 
-def read_args(args_as_a_list=sys.argv[1:]):
+def read_args(evaluation=False, args_as_a_list=sys.argv[1:]):
     optparser = optparse.OptionParser()
     optparser.add_option(
         "-T", "--train", default="",
@@ -380,6 +380,11 @@ def read_args(args_as_a_list=sys.argv[1:]):
         "--batch-size", default="5",
         type='int', help="Number of samples in one epoch"
     )
+    if evaluation:
+        optparser.add_option(
+            "--run-for-all-checkpoints", default="0",
+            type='int', help="run evaluation for all checkpoints"
+        )
     opts = optparser.parse_args(args_as_a_list)[0]
     return opts
 
