@@ -324,7 +324,8 @@ class MainTaggerModel(object):
         return context_representations
 
     def get_loss(self, sentences_in_the_batch):
-        dynet.renew_cg(immediate_compute=True, check_validity=True)
+        # immediate_compute=True, check_validity=True
+        dynet.renew_cg()
         loss_array = []
         for sentence in sentences_in_the_batch:
             """
