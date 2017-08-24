@@ -8,16 +8,17 @@ import math
 import os
 
 import numpy as np
-import tensorflow as tf
 
 import loader
 from loader import augment_with_pretrained, calculate_global_maxes
 from loader import update_tag_scheme, prepare_dataset
 from loader import word_mapping, char_mapping, tag_mapping
-# from model import Model
-from model_tensorflow import Model
+# from model import MainTaggerModel
+from model import MainTaggerModel
 from utils import models_path, evaluate, eval_script, eval_temp
 from utils import read_args, form_parameters_dict
+
+from dynetsaver import DynetSaver
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("main")
@@ -47,9 +48,12 @@ if not os.path.exists(eval_temp):
 if not os.path.exists(models_path):
     os.makedirs(models_path)
 
+# TODO: Move this to a better configurational structure
+eval_logs_dir = os.path.join(eval_temp, "eval_logs")
+
 # Initialize model
-model = Model(parameters=parameters, models_path=models_path, overwrite_mappings=opts.overwrite_mappings)
-print "Model location: %s" % model.model_path
+model = MainTaggerModel(parameters=parameters, models_path=models_path, overwrite_mappings=opts.overwrite_mappings)
+print "MainTaggerModel location: %s" % model.model_path
 
 # Data parameters
 lower = parameters['lower']
@@ -88,8 +92,8 @@ else:
     dico_words_train = dico_words
 
 # Create a dictionary and a mapping for words / POS tags / tags
-dico_chars, char_to_id, id_to_char = char_mapping(train_sentences)
-dico_tags, tag_to_id, id_to_tag = tag_mapping(train_sentences)
+dico_chars, char_to_id, id_to_char = char_mapping(train_sentences + dev_sentences + test_sentences)
+dico_tags, tag_to_id, id_to_tag = tag_mapping(train_sentences + dev_sentences + test_sentences)
 
 # Index data
 train_buckets, train_stats, train_unique_words = prepare_dataset(
@@ -155,34 +159,23 @@ model.save_mappings(id_to_word, id_to_char, id_to_tag)
 batch_size = opts.batch_size
 
 # Build the model
-cost, train_step, _, _, _, _, _, enqueue_op, placeholders = model.build(max_sentence_length_scalar=global_max_sentence_length,
-                                             max_word_length_scalar=global_max_char_length,
-                                             batch_size_scalar=batch_size,
-                                             **parameters)
+model.build(**parameters)
 
-# config = tf.ConfigProto(
-#     device_count = {'GPU': 0})
-
-config = None
-
-sess = tf.Session(config=config)
-
-model.sess = sess
-model.saver = tf.train.Saver(pad_step_number=True, keep_checkpoint_every_n_hours=6, max_to_keep=200)
-
-sess.run(tf.global_variables_initializer())
+model.saver = DynetSaver(model.model, model.model_path)
 
 # Reload previous model values
 if opts.reload:
     print 'Reloading previous model...'
     # model.reload()
-    ckpt = tf.train.get_checkpoint_state(model.model_path)
+    ckpt = model.saver.get_checkpoint_state()
     if ckpt and ckpt.model_checkpoint_path:
         # Restores from checkpoint
-        model.saver.restore(sess, ckpt.model_checkpoint_path)
+        model.saver.restore(ckpt.model_checkpoint_path)
         print "Reloaded %s" % ckpt.model_checkpoint_path
 
 ### At this point, the training data is encoded in our format.
+
+from eval import eval_with_specific_model
 
 #
 # Train network
@@ -198,30 +191,14 @@ count = 0
 for epoch in xrange(n_epochs):
     epoch_costs = []
     print "Starting epoch %i..." % epoch
-    # training
-    # form a batch first
-    ## choose a bucket
-
-    import threading
-    from loader import _load_and_enqueue
 
     permuted_bucket_ids = np.random.permutation(range(len(train_buckets)))
 
     for bucket_id in list(permuted_bucket_ids):
 
-    # bucket_id = np.random.random_integers(0, len(train_bins)-1)
-        bucket_data = train_buckets[bucket_id][0]
-        bucket_maxes = train_buckets[bucket_id][1]
+        bucket_data = train_buckets[bucket_id]
 
-        n_batches = int(math.ceil(float(bucket_data['sentence_lengths'].shape[0]) / batch_size))
-
-        def load_and_enqueue():
-            _load_and_enqueue(sess, bucket_data, n_batches, batch_size, placeholders,
-                                                       enqueue_op, None,
-                                                      train=True)
-
-        t = threading.Thread(target=load_and_enqueue)
-        t.start()
+        n_batches = int(math.ceil(float(len(bucket_data)) / batch_size))
 
         print "n_batches: %d" % n_batches
         print "bucket_id: %d" % bucket_id
@@ -229,12 +206,26 @@ for epoch in xrange(n_epochs):
         for batch_idx in range(n_batches):
             count += batch_size
 
-            cost_value, _ = sess.run([cost, train_step])
-            epoch_costs.append(cost_value)
+            sentences_in_the_batch = bucket_data[(batch_idx*batch_size):((batch_idx+1)*batch_size)]
+
+            loss = model.get_loss(sentences_in_the_batch)
+            epoch_costs.append(loss.value()/batch_size)
+            loss.backward()
+            model.trainer.update()
             if count % 50 == 0 and count != 0:
                 sys.stdout.write("%f " % np.mean(epoch_costs[-50:]))
                 sys.stdout.flush()
-    model.save(epoch, best_performances=[best_dev, best_test], epoch_costs=epoch_costs)
+        model.trainer.status()
+    f_scores = eval_with_specific_model(model, epoch, dev_buckets, test_buckets,
+                                        id_to_tag, batch_size,
+                                        eval_logs_dir,
+                                        tag_scheme)
+    if best_dev < f_scores["dev"]:
+        logging.info("New best dev score, best_dev: %lf %lf" % (f_scores["dev"], f_scores["test"]))
+        best_dev = f_scores["dev"]
+        model.save(epoch)
+        model.save_best_performances_and_costs(epoch,
+                                               best_performances=[f_scores["dev"], f_scores["test"]],
+                                               epoch_costs=epoch_costs)
     print "Epoch %i done. Average cost: %f" % (epoch, np.mean(epoch_costs))
-    print "Model dir: %s" % model.model_path
-    t.join()
+    print "MainTaggerModel dir: %s" % model.model_path

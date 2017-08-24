@@ -224,47 +224,8 @@ def prepare_dataset(sentences, word_to_id, char_to_id, tag_to_id,
         data_to_be_bucketed = data_sorted_by_sentence_length[n_samples_to_be_bucketed*(bin_idx):n_samples_to_be_bucketed*(bin_idx+1)]
         if len(data_to_be_bucketed) == 0:
             continue
-        max_sentence_length = data_to_be_bucketed[-1]['sentence_lengths']
-        max_word_length = max([x['max_word_length_in_this_sample'] for x in data_to_be_bucketed])
-        maxes = [max_sentence_length,
-                 max_word_length]
-        logging.info("%s" % maxes)
-        n_samples_in_the_bucket = len(data_to_be_bucketed)
-        str_words_ar = ['']*n_samples_in_the_bucket
-        words_ar = np.zeros((n_samples_in_the_bucket, global_max_sentence_length), dtype=np.int32)
-        chars_ar = np.zeros((n_samples_in_the_bucket, global_max_sentence_length, global_max_char_length), dtype=np.int32)
-        char_lengths_ar = np.zeros((n_samples_in_the_bucket, global_max_sentence_length), dtype=np.int32)
-        caps_ar = np.zeros((n_samples_in_the_bucket, global_max_sentence_length), dtype=np.int32)
-        tags_ar = np.zeros((n_samples_in_the_bucket, global_max_sentence_length), dtype=np.int32)
-        sentence_lengths_ar = np.zeros((n_samples_in_the_bucket,), dtype=np.int32)
-        arrays_and_labels = [[str_words_ar, 'str_words'],
-                             [words_ar, 'word_ids'],
-                             [chars_ar, 'char_for_ids'],
-                             [char_lengths_ar, 'char_lengths'],
-                             [caps_ar, 'cap_ids'],
-                             [tags_ar, 'tag_ids'],
-                             [sentence_lengths_ar, 'sentence_lengths']]
-        for i, d in enumerate(data_to_be_bucketed):
-            if i % 100 == 0:
-                logging.info("Sample %d is being binned" % i)
-            for arr, label in arrays_and_labels:
-                # logging.info("Label: %s" % label)
-                # print d[label]
-                if label == "str_words":
-                    arr[i] = d[label]
-                elif len(arr.shape) == 2:
-                    arr[i,:(len(d[label]))] = d[label]
-                elif len(arr.shape) == 3:
-                    subarray_shape = arr[i,].shape
-                    # logging.info("Subarray shape: %s" % subarray_shape)
-                    arr[i,] = np.array([row + [0]*(subarray_shape[1]-len(row)) for row in d[label] + [[0]*subarray_shape[1]]*(subarray_shape[0]-len(d[label]))])
-                else:
-                    arr[i] = d[label]
 
-        bucket_data_dict = {label: arr for arr, label in arrays_and_labels}
-        bucket_data_dict['max_sentence_length'] = max_sentence_length
-        bucket_data_dict['max_word_length'] = max_word_length
-        buckets.append((bucket_data_dict, maxes))
+        buckets.append(data_to_be_bucketed)
 
     return buckets, stats, n_unique_words
 
@@ -313,7 +274,7 @@ def read_an_example(_bucket_data_dict, batch_idx, batch_size_scalar, n_sentences
 
     return given_placeholders, str_words
 
-def _load_and_enqueue(sess, bucket_data_dict, n_batches, batch_size_scalar, placeholders, enqueue_op, str_words_q,
+def _load_and_enqueue(bucket_data_dict, n_batches, batch_size_scalar,
                       train=True):
 
     # TODO: shuffle the bucket_data here.
@@ -348,9 +309,6 @@ def _load_and_enqueue(sess, bucket_data_dict, n_batches, batch_size_scalar, plac
         feed_dict = {placeholders[key]: given_placeholders[key] for key in placeholders.keys()}
 
         sess.run(enqueue_op, feed_dict=feed_dict)
-
-        if str_words_q:
-            str_words_q.put(str_words)
 
 
 def augment_with_pretrained(dictionary, ext_emb_path, words):

@@ -2,17 +2,72 @@ import optparse
 import sys
 from collections import OrderedDict
 
-import os
-import re
 import codecs
 import numpy as np
-#import theano
+import os
+import re
 
+#import theano
 
 models_path = "./models"
 eval_path = "./evaluation"
 eval_temp = os.path.join(eval_path, "temp")
 eval_script = os.path.join(eval_path, "conlleval")
+
+def lock_file(f):
+    import fcntl, errno, time
+    while True:
+        try:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            break
+        except IOError as e:
+            # raise on unrelated IOErrors
+            if e.errno != errno.EAGAIN:
+                raise
+            else:
+                time.sleep(0.1)
+    return True
+
+
+def unlock_file(f):
+    import fcntl
+    fcntl.flock(f, fcntl.LOCK_UN)
+
+def create_a_model_subpath(models_path):
+    current_model_paths = read_model_paths_database(models_path)
+    if len(current_model_paths) > 0:
+        last_model_path_id_part = int(current_model_paths[-1][0].split("-")[1])
+    else:
+        last_model_path_id_part = -1
+
+    return os.path.join(models_path, "model-%08d" % (last_model_path_id_part+1)), (last_model_path_id_part+1)
+
+def add_a_model_path_to_the_model_paths_database(models_path, model_subpath, model_params_string):
+    f = codecs.open(os.path.join(models_path, "model_paths_database.dat"), "a+")
+    lock_file(f)
+    f.write("%s %s\n" % (model_subpath, model_params_string))
+    unlock_file(f)
+    f.close()
+
+def read_model_paths_database(models_path):
+    try:
+        f = codecs.open(os.path.join(models_path, "model_paths_database.dat"), "r")
+        lock_file(f)
+        lines = f.readlines()
+        sorted_model_subpaths = sorted([line.strip().split() for line in lines if len(line.strip()) > 0], key=lambda x: x[0])
+        # current_model_paths = {model_path: model_params for model_path, model_params in sorted_model_paths}
+        unlock_file(f)
+        f.close()
+    except IOError as e:
+        return []
+    return sorted_model_subpaths
+
+def get_model_subpath(parameters):
+    model_parameters_string = get_name(parameters)
+    sorted_model_subpaths = read_model_paths_database("models")
+    for cur_model_subpath, cur_model_parameters_string in sorted_model_subpaths[::-1]:
+        if cur_model_parameters_string == model_parameters_string:
+            return cur_model_subpath
 
 
 def get_name(parameters):
@@ -409,3 +464,5 @@ def form_parameters_dict(opts):
     parameters['lr_method'] = opts.lr_method
 
     return parameters
+
+
