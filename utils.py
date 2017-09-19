@@ -428,12 +428,16 @@ def read_args(evaluation=False, args_as_a_list=sys.argv[1:]):
         type='int', help="Explicitly state to overwrite mappings"
     )
     optparser.add_option(
-        "--maximum-epochs", default="1000",
+        "--maximum-epochs", default="100",
         type='int', help="Maximum number of epochs"
     )
     optparser.add_option(
         "--batch-size", default="5",
         type='int', help="Number of samples in one epoch"
+    )
+    optparser.add_option(
+        "--dynet-gpu", default="1",
+        type='int', help="Use gpu or not"
     )
     if evaluation:
         optparser.add_option(

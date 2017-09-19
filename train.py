@@ -3,6 +3,7 @@
 import itertools
 import logging
 import sys
+import time
 
 import math
 import os
@@ -188,7 +189,10 @@ best_dev = -np.inf
 best_test = -np.inf
 count = 0
 
+model.trainer.set_clip_threshold(5.0)
+
 for epoch in xrange(n_epochs):
+    start_time = time.time()
     epoch_costs = []
     print "Starting epoch %i..." % epoch
 
@@ -200,8 +204,7 @@ for epoch in xrange(n_epochs):
 
         n_batches = int(math.ceil(float(len(bucket_data)) / batch_size))
 
-        print "n_batches: %d" % n_batches
-        print "bucket_id: %d" % bucket_id
+        print "bucket_id: %d, n_batches: %d" % (bucket_id, n_batches)
 
         for batch_idx in range(n_batches):
             count += batch_size
@@ -216,16 +219,21 @@ for epoch in xrange(n_epochs):
                 sys.stdout.write("%f " % np.mean(epoch_costs[-50:]))
                 sys.stdout.flush()
         model.trainer.status()
+    print ""
     f_scores = eval_with_specific_model(model, epoch, dev_buckets, test_buckets,
                                         id_to_tag, batch_size,
                                         eval_logs_dir,
                                         tag_scheme)
     if best_dev < f_scores["dev"]:
-        logging.info("New best dev score, best_dev: %lf %lf" % (f_scores["dev"], f_scores["test"]))
+        logging.info("New best dev score => best_dev, best_test: %lf %lf" % (f_scores["dev"], f_scores["test"]))
         best_dev = f_scores["dev"]
+        best_test = f_scores["test"]
         model.save(epoch)
         model.save_best_performances_and_costs(epoch,
                                                best_performances=[f_scores["dev"], f_scores["test"]],
                                                epoch_costs=epoch_costs)
+    else:
+        logging.info("Best dev and accompanying test score, best_dev, best_test: %lf %lf" % (best_dev, best_test))
     print "Epoch %i done. Average cost: %f" % (epoch, np.mean(epoch_costs))
     print "MainTaggerModel dir: %s" % model.model_path
+    print "Training took %lf seconds for this epoch" % (time.time()-start_time)

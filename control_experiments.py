@@ -31,7 +31,7 @@ def my_config():
     learning_rate = 0.01
 
     crf = 1
-    lr_method = "sgd-lr_%lf" % learning_rate
+    lr_method = "sgd-lr@%lf" % learning_rate
     dropout = 0.5
     char_dim = 200
     char_lstm_dim = 200

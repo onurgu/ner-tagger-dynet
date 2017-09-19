@@ -3,7 +3,7 @@ import re
 import numpy as np
 
 import dynet
-from dynet import Model, BiRNNBuilder, LSTMBuilder
+from dynet import Model, BiRNNBuilder, LSTMBuilder, CoupledLSTMBuilder
 
 import codecs
 import cPickle
@@ -15,13 +15,15 @@ from crf import CRF
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-from utils import get_name, create_a_model_subpath, get_model_subpath, add_a_model_path_to_the_model_paths_database
+from utils import get_name, create_a_model_subpath, get_model_subpath, \
+    add_a_model_path_to_the_model_paths_database
 
 
 class MainTaggerModel(object):
     """
     Network architecture.
     """
+
     def __init__(self, parameters=None, models_path=None, model_path=None, overwrite_mappings=0):
         """
         Initialize the model. We either provide the parameters and a path where
@@ -42,7 +44,8 @@ class MainTaggerModel(object):
             # MainTaggerModel location
             available_model_subpath, model_path_id = create_a_model_subpath(models_path)
             # model_path = os.path.join(models_path, available_model_subpath)
-            add_a_model_path_to_the_model_paths_database(models_path, available_model_subpath, get_name(parameters))
+            add_a_model_path_to_the_model_paths_database(models_path, available_model_subpath,
+                                                         get_name(parameters))
             self.model_path = available_model_subpath
             # model_path = os.path.join(models_path, self.name)
             # self.model_path = model_path
@@ -127,10 +130,12 @@ class MainTaggerModel(object):
     def save_best_performances_and_costs(self, epoch, best_performances, epoch_costs):
 
         path = self.model_path
-        model_ckpt_filename = ("model-epoch-%08d" % epoch) if epoch is not None else ("best-models-%08d" % self.n_bests)
+        model_ckpt_filename = ("model-epoch-%08d" % epoch) if epoch is not None else (
+        "best-models-%08d" % self.n_bests)
         if len(best_performances) > 0:
             best_performances_path = os.path.join(path,
-                                                  "%s-%s.txt" % (model_ckpt_filename, "best_performances"))
+                                                  "%s-%s.txt" % (
+                                                  model_ckpt_filename, "best_performances"))
             best_performances_f = open(best_performances_path, "w")
             best_performances_f.write(" ".join([str(b) for b in best_performances]) + "\n")
             best_performances_f.close()
@@ -186,12 +191,17 @@ class MainTaggerModel(object):
         # Final input (all word features)
         word_representation_dim = 0
 
+        def get_scale(shape):
+            return np.sqrt(6/np.sum(list(shape)))
+
         #
         # Word inputs
         #
         if word_dim:
             # Initialize with pretrained embeddings
-            new_weights = np.zeros([n_words, word_dim], dtype='float32')
+            scale = get_scale((n_words, word_dim))
+            new_weights = scale * np.random.uniform(-1.0, 1.0, (n_words, word_dim))
+            # new_weights = np.zeros([n_words, word_dim], dtype='float32')
             if pre_emb and training:
                 print 'Loading pretrained embeddings from %s...' % pre_emb
                 pretrained = {}
@@ -233,8 +243,8 @@ class MainTaggerModel(object):
                 print 'Loaded %i pretrained embeddings.' % len(pretrained)
                 print ('%i / %i (%.4f%%) words have been initialized with '
                        'pretrained embeddings.') % (
-                            c_found + c_lower + c_zeros, n_words,
-                            100. * (c_found + c_lower + c_zeros) / n_words
+                          c_found + c_lower + c_zeros, n_words,
+                          100. * (c_found + c_lower + c_zeros) / n_words
                       )
                 print ('%i found directly, %i after lowercasing, '
                        '%i after lowercasing + zero.') % (
@@ -242,8 +252,9 @@ class MainTaggerModel(object):
                       )
             word_representation_dim += word_dim
             self.word_embeddings = self.model.add_lookup_parameters((n_words, word_dim),
-                                             init=dynet.NumpyInitializer(new_weights),
-                                             name="wordembeddings")
+                                                                    init=dynet.NumpyInitializer(
+                                                                        new_weights),
+                                                                    name="wordembeddings")
 
             self.tanh_layer_W = self.model.add_parameters((word_lstm_dim, 2 * word_lstm_dim))
             self.tanh_layer_b = self.model.add_parameters((word_lstm_dim))
@@ -253,25 +264,24 @@ class MainTaggerModel(object):
 
         def create_bilstm_layer(label, input_dim, lstm_dim, bilstm=True):
             if bilstm:
-                builder = BiRNNBuilder(1, input_dim, lstm_dim, self.model, LSTMBuilder)
+                builder = BiRNNBuilder(1, input_dim, lstm_dim, self.model, CoupledLSTMBuilder)
             else:
-                builder = LSTMBuilder(1, input_dim, lstm_dim, self.model)
+                builder = CoupledLSTMBuilder(1, input_dim, lstm_dim, self.model)
 
             return builder
 
-        #
         # Chars inputs
         #
         if char_dim:
             self.char_embeddings = self.model.add_lookup_parameters((n_chars, char_dim),
-                                             name="charembeddings")
+                                                                    name="charembeddings")
 
             self.char_lstm_layer = create_bilstm_layer("char",
-                                                  char_dim,
-                                                  (2 if ch_b else 1)*char_lstm_dim,
-                                                  bilstm=True if ch_b else False)
+                                                       char_dim,
+                                                       (2 if ch_b else 1) * char_lstm_dim,
+                                                       bilstm=True if ch_b else False)
 
-            word_representation_dim += (2 if ch_b else 1)*char_lstm_dim
+            word_representation_dim += (2 if ch_b else 1) * char_lstm_dim
 
         #
         # Capitalization feature
@@ -279,7 +289,7 @@ class MainTaggerModel(object):
         if cap_dim:
             word_representation_dim += cap_dim
             self.cap_embeddings = self.model.add_lookup_parameters((n_cap, cap_dim),
-                                             name="capembeddings")
+                                                                   name="capembeddings")
 
         # LSTM for words
         self.sentence_level_bilstm_layer = \
@@ -290,22 +300,45 @@ class MainTaggerModel(object):
 
         self.crf_module = CRF(self.model, self.id_to_tag)
 
-        # Training
 
-        self.trainer = dynet.SimpleSGDTrainer(self.model, learning_rate=0.01)
+
+        # Training
+        def process_hyperparameter_definition(x):
+            tokens = x.split("@")
+            subtokens = tokens[0].split("_")
+            if len(subtokens) > 1 and subtokens[-1] == "float":
+                return ["_".join(subtokens[:-1]), float(tokens[1])]
+            else:
+                return tokens
+        _tokens = lr_method.split("-")
+        opt_update_algorithm = _tokens[0]
+        opt_hyperparameters = [process_hyperparameter_definition(x) for x in _tokens[1:]]
+        opt_update_algorithms = {'sgd': dynet.SimpleSGDTrainer,
+                                 'adam': dynet.AdamTrainer,
+                                 'adadelta': dynet.AdadeltaTrainer,
+                                 'adagrad': dynet.AdagradTrainer,
+                                 'momentum': dynet.MomentumSGDTrainer,
+                                 'rmsprop': dynet.RMSPropTrainer}
+
+        self.trainer = opt_update_algorithms[opt_update_algorithm](self.model,
+                                                                   **{name: value for name, value in opt_hyperparameters})
+
+        # self.trainer = dynet.SimpleSGDTrainer(self.model, learning_rate=0.01)
 
         return self
 
     def get_char_representations(self, sentence):
         # initial_state = self.char_lstm_layer.initial_state()
 
-        char_embeddings = [[self.char_embeddings[char_id] for char_id in word] for sentence_pos, word in enumerate(sentence['char_for_ids'])]
+        char_embeddings = [[self.char_embeddings[char_id] for char_id in word]
+                           for sentence_pos, word in enumerate(sentence['char_for_ids'])]
 
         char_representations = []
         for sentence_pos, char_embeddings_for_word in enumerate(char_embeddings):
             # print char_embeddings_for_word
             try:
-                char_representations.append(self.char_lstm_layer.transduce(char_embeddings_for_word)[-1])
+                char_representations.append(
+                    self.char_lstm_layer.transduce(char_embeddings_for_word)[-1])
             except IndexError as e:
                 print sentence
                 print char_embeddings_for_word
@@ -318,8 +351,8 @@ class MainTaggerModel(object):
             self.sentence_level_bilstm_layer.transduce(combined_word_representations)
 
         context_representations = [dynet.tanh(dynet.affine_transform([self.tanh_layer_b.expr(),
-                                                           self.tanh_layer_W.expr(),
-                                                           context])) \
+                                                                      self.tanh_layer_W.expr(),
+                                                                      context])) \
                                    for context in context_representations]
         return context_representations
 
@@ -366,18 +399,7 @@ class MainTaggerModel(object):
         context_representations = \
             self.get_sentence_level_bilstm_outputs(combined_word_representations)
         tag_scores = [dynet.affine_transform([self.last_layer_b.expr(),
-                                                         self.last_layer_W.expr(),
-                                                         context]) \
+                                              self.last_layer_W.expr(),
+                                              context]) \
                       for context in context_representations]
         return tag_scores
-
-
-
-
-
-
-
-
-
-
-

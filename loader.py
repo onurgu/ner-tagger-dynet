@@ -110,6 +110,76 @@ def tag_mapping(sentences):
     print "Found %i unique named entity tags" % len(dico)
     return dico, tag_to_id, id_to_tag
 
+def morpho_tag_mapping(sentences, morpho_tag_type='wo_root', morpho_tag_column_index=1):
+    """
+    Create a dictionary and a mapping of tags, sorted by frequency.
+    """
+    if morpho_tag_type == 'char':
+        morpho_tags = ["".join([w[morpho_tag_column_index] for w in s]) for s in sentences]
+    else:
+        morpho_tags = extract_morpho_tags_ordered(morpho_tag_type, sentences, morpho_tag_column_index)
+
+    # print morpho_tags
+    #morpho_tags = [[word[1].split("+") for word in s] for s in sentences]
+    # print morpho_tags
+    dico = create_dico(morpho_tags)
+    # print dico
+    morpho_tag_to_id, id_to_morpho_tag = create_mapping(dico)
+    print morpho_tag_to_id
+    print "Found %i unique morpho tags" % len(dico)
+    return dico, morpho_tag_to_id, id_to_morpho_tag
+
+
+def extract_morpho_tags_ordered(morpho_tag_type, sentences, morpho_tag_column_index):
+    morpho_tags = []
+    for s in sentences:
+        # print s
+        # sys.exit(1)
+        morpho_tags += extract_morpho_tags_from_one_sentence_ordered(morpho_tag_type, [], s, morpho_tag_column_index)
+    return morpho_tags
+
+
+def extract_morpho_tags_from_one_sentence_ordered(morpho_tag_type, morpho_tags, s, morpho_tag_column_index):
+    assert morpho_tag_column_index in [1, 2], "We expect to 1 or 2"
+    for word in s:
+        if morpho_tag_type.startswith('wo_root'):
+            if morpho_tag_type == 'wo_root_after_DB' and morpho_tag_column_index == 1: # this is only applicable to Turkish dataset
+                tmp = []
+                for tag in word[1].split("+")[1:][::-1]:
+                    if tag.endswith("^DB"):
+                        tmp += [tag]
+                        break
+                    else:
+                        tmp += [tag]
+                morpho_tags += [tmp]
+            else:
+                if morpho_tag_column_index == 2: # this means we're reading Czech dataset (it's faulty in a sense)
+                    morpho_tags += [word[morpho_tag_column_index].split("")]
+                else:
+                    morpho_tags += [word[morpho_tag_column_index].split("+")[1:]]
+        elif morpho_tag_type.startswith('with_root'):
+            if morpho_tag_column_index == 1:
+                root = [word[morpho_tag_column_index].split("+")[0]]
+            else:
+                root = [word[1]] # In Czech dataset, the lemma is given in the first column
+            tmp = []
+            tmp += root
+            if morpho_tag_type == 'with_root_after_DB' and morpho_tag_column_index == 1:
+                for tag in word[morpho_tag_column_index].split("+")[1:][::-1]:
+                    if tag.endswith("^DB"):
+                        tmp += [tag]
+                        break
+                    else:
+                        tmp += [tag]
+                morpho_tags += [tmp]
+            else:
+                if morpho_tag_column_index == 2:
+                    morpho_tags += [tmp + word[morpho_tag_column_index].split("")]
+                else: # only 1 is possible
+                    morpho_tags += [word[morpho_tag_column_index].split("+")] # I removed the 'tmp +' because it just repeated the first element which is root
+    return morpho_tags
+
+
 def is_number(s):
     try:
         float(s)
