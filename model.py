@@ -70,13 +70,14 @@ class MainTaggerModel(object):
             self.reload_mappings()
         self.components = {}
 
-    def save_mappings(self, id_to_word, id_to_char, id_to_tag):
+    def save_mappings(self, id_to_word, id_to_char, id_to_tag, id_to_morpho_tag):
         """
         We need to save the mappings if we want to use the model later.
         """
         self.id_to_word = id_to_word
         self.id_to_char = id_to_char
         self.id_to_tag = id_to_tag
+        self.id_to_morpho_tag = id_to_morpho_tag
 
         if self.overwrite_mappings:
             with open(self.mappings_path, 'wb') as f:
@@ -84,6 +85,7 @@ class MainTaggerModel(object):
                     'id_to_word': self.id_to_word,
                     'id_to_char': self.id_to_char,
                     'id_to_tag': self.id_to_tag,
+                    'id_to_morpho_tag': self.id_to_morpho_tag,
                 }
                 cPickle.dump(mappings, f)
         elif os.path.exists(self.mappings_path):
@@ -99,6 +101,7 @@ class MainTaggerModel(object):
         self.id_to_word = mappings['id_to_word']
         self.id_to_char = mappings['id_to_char']
         self.id_to_tag = mappings['id_to_tag']
+        self.id_to_morpho_tag = mappings['id_to_morpho_tag']
 
     def add_component(self, param):
         """
@@ -161,11 +164,80 @@ class MainTaggerModel(object):
         self.saver.restore(os.path.join(path, "model.ckpt"),
                            epoch=epoch, n_bests=self.n_bests)
 
+    def get_last_layer_context_representations(self, sentence, context_representations):
+        last_layer_context_representations = context_representations
+
+        if self.parameters['integration_mode'] > 0:
+
+            morph_analysis_representations, morph_analysis_scores = \
+                self.get_morph_analysis_representations_and_scores(sentence,
+                                                                   context_representations)
+
+            selected_morph_analysis_representations = \
+                self.disambiguate_morph_analyzes(morph_analysis_scores)
+
+            md_loss = dynet.esum(
+                [dynet.pickneglogsoftmax(morph_analysis_scores_for_word, golden_idx)
+                 for golden_idx, morph_analysis_scores_for_word in
+                 zip(sentence['golden_morph_analysis_indices'],
+                     morph_analysis_scores)])
+
+            if self.parameters['integration_mode'] == 2:
+                # on the other hand, we can implement two layer of contexts, which we use the
+                # first for morphological disambiguation and then concatenate the predicted/computed/
+                # selected morphological analysis representation to use for calculating tag_scores
+                last_layer_context_representations = \
+                    [dynet.concatenate([context,
+                                        morph_analysis_representations[word_pos]
+                                        [selected_morph_analysis_representation_pos]])
+                     for word_pos, (selected_morph_analysis_representation_pos, context) in
+                     enumerate(
+                         zip(selected_morph_analysis_representations, context_representations))]
+            if md_loss.value() > 1000:
+                logging.error("BEEP")
+        else:
+            # only the plain old NER model
+            # we must decide whether we should implement the morphological embeddings scheme here.
+            md_loss = dynet.scalarInput(0)
+            selected_morph_analysis_representations = None
+            last_layer_context_representations = context_representations
+
+        assert last_layer_context_representations is not None
+        return last_layer_context_representations, md_loss, selected_morph_analysis_representations
+
+    def get_morph_analysis_scores(self, morph_analysis_representations, context_representations):
+        morph_analysis_scores = \
+            [dynet.softmax(
+                dynet.concatenate([dynet.dot_product(morph_analysis_representation, context)
+                                   for morph_analysis_representation in
+                                   morph_analysis_representations[word_pos]]))
+                for word_pos, context in enumerate(context_representations)]
+        return morph_analysis_scores
+
+    def get_morph_analysis_representations_and_scores(self, sentence, context_representations):
+
+        morph_analysis_representations = self.get_morph_analysis_representations(sentence)
+
+        morph_analysis_scores = self.get_morph_analysis_scores(morph_analysis_representations,
+                                                               context_representations)
+
+        return morph_analysis_representations, morph_analysis_scores
+
+    def disambiguate_morph_analyzes(self, morph_analysis_scores):
+
+        selected_morph_analysis_representations = [
+            np.argmax(morph_analysis_scores_for_word.npvalue())
+            for morph_analysis_scores_for_word in morph_analysis_scores]
+
+        return selected_morph_analysis_representations
+
     def build(self,
               dropout,
               char_dim,
               char_lstm_dim,
               ch_b,
+              mt_d,
+              mt_t,
               word_dim,
               word_lstm_dim,
               w_b,
@@ -183,6 +255,7 @@ class MainTaggerModel(object):
         n_words = len(self.id_to_word)
         n_chars = len(self.id_to_char)
         n_tags = len(self.id_to_tag)
+        n_morpho_tags = len(self.id_to_morpho_tag)
 
         # Number of capitalization features
         if cap_dim:
@@ -259,7 +332,11 @@ class MainTaggerModel(object):
             self.tanh_layer_W = self.model.add_parameters((word_lstm_dim, 2 * word_lstm_dim))
             self.tanh_layer_b = self.model.add_parameters((word_lstm_dim))
 
-            self.last_layer_W = self.model.add_parameters((n_tags, word_lstm_dim))
+            if self.parameters['integration_mode'] in [0, 1]:
+                self.last_layer_W = self.model.add_parameters((n_tags, word_lstm_dim))
+            elif self.parameters['integration_mode'] == 2:
+                self.last_layer_W = self.model.add_parameters((n_tags, word_lstm_dim + 2 * mt_d))
+
             self.last_layer_b = self.model.add_parameters((n_tags))
 
         def create_bilstm_layer(label, input_dim, lstm_dim, bilstm=True):
@@ -283,6 +360,22 @@ class MainTaggerModel(object):
 
             word_representation_dim += (2 if ch_b else 1) * char_lstm_dim
 
+        if self.parameters['integration_mode'] > 0:
+
+            self.char_lstm_layer_for_morph_analysis_roots = \
+                create_bilstm_layer("char_for_morph_analysis_root",
+                                   char_dim,
+                                   2 * mt_d,
+                                   bilstm=True)
+
+            self.morpho_tag_embeddings = self.model.add_lookup_parameters((n_morpho_tags, mt_d),
+                                                                    name="charembeddings")
+            self.morpho_tag_lstm_layer_for_morph_analysis_tags = \
+                create_bilstm_layer("morpho_tag_for_morph_analysis_tags",
+                                    mt_d,
+                                    2 * mt_d,
+                                    bilstm=True)
+
         #
         # Capitalization feature
         #
@@ -297,6 +390,24 @@ class MainTaggerModel(object):
                                 word_representation_dim,
                                 2 * word_lstm_dim,
                                 bilstm=True if w_b else False)
+
+        def _create_tying_method(activation_function=dynet.tanh, classic=True):
+
+            def f(x, y):
+                if classic:
+                    return dynet.tanh(x + y)
+                else:
+                    return activation_function(self.tying_method_W * dynet.concatenate([x, y]) + self.tying_method_b)
+
+            return f
+
+        if self.parameters['tying_method']:
+            self.tying_method_W = self.model.add_parameters((word_lstm_dim, 2*mt_d))
+            self.tying_method_b = self.model.add_parameters((word_lstm_dim))
+
+            self.f_tying_method = _create_tying_method(activation_function=dynet.tanh, classic=False)
+        else:
+            self.f_tying_method = _create_tying_method(activation_function=dynet.tanh, classic=True)
 
         self.crf_module = CRF(self.model, self.id_to_tag)
 
@@ -356,6 +467,30 @@ class MainTaggerModel(object):
                                    for context in context_representations]
         return context_representations
 
+    def predict(self, sentence):
+
+        context_representations = self.get_context_representations(sentence)
+
+        last_layer_context_representations, _, _ = \
+            self.get_last_layer_context_representations(sentence,
+                                                        context_representations)
+
+        tag_scores = self.calculate_tag_scores(last_layer_context_representations)
+
+        _, decoded_tags = self.crf_module.viterbi_loss(tag_scores,
+                                                          sentence['tag_ids'])
+
+        if self.parameters['integration_mode'] > 0:
+            morph_analysis_representations, morph_analysis_scores = \
+                self.get_morph_analysis_representations_and_scores(sentence,
+                                                                   context_representations)
+
+            selected_morph_analysis_representations = \
+                self.disambiguate_morph_analyzes(morph_analysis_scores)
+            return selected_morph_analysis_representations, decoded_tags
+        else:
+            return decoded_tags
+
     def get_loss(self, sentences_in_the_batch):
         # immediate_compute=True, check_validity=True
         dynet.renew_cg()
@@ -369,37 +504,96 @@ class MainTaggerModel(object):
                 'char_lengths': [len(char) for char in chars],
                 'cap_ids': caps,
                 'tag_ids': tags,
+                'morpho_tag_ids': morpho_tags,
+                'morpho_analyzes_tags': morph_analyzes_tags,
+                'morpho_analyzes_roots': morph_analyzes_roots,
+                'golden_morph_analysis_indices': golden_analysis_indices,
                 'sentence_lengths': len(s),
                 'max_word_length_in_this_sample': max([len(x) for x in chars])
             })
             """
 
-            tag_scores = self.calculate_tag_scores(sentence)
+            context_representations = self.get_context_representations(sentence)
 
-            loss = self.crf_module.neg_log_loss(tag_scores, sentence['tag_ids'])
+            last_layer_context_representations, md_loss, _ = \
+                self.get_last_layer_context_representations(sentence,
+                                                            context_representations)
 
-            loss_array.append(loss)
+            tag_scores = self.calculate_tag_scores(last_layer_context_representations)
+
+            crf_loss = self.crf_module.neg_log_loss(tag_scores, sentence['tag_ids'])
+
+            if crf_loss.value() > 1000:
+                logging.error("BEER")
+
+            if self.parameters['integration_mode'] > 0:
+                loss_array.append(md_loss)
+
+            loss_array.append(crf_loss)
         return dynet.esum(loss_array)
 
-    def calculate_tag_scores(self, sentence):
+    def calculate_tag_scores(self, context_representations):
+
+        tag_scores = [dynet.affine_transform([self.last_layer_b.expr(),
+                                              self.last_layer_W.expr(),
+                                              context]) \
+                      for context in context_representations]
+        return tag_scores
+
+    def get_context_representations(self, sentence):
+
+        representations_to_be_zipped = []
         word_embedding_based_representations = \
             [self.word_embeddings[word_id] for word_id in sentence['word_ids']]
+        representations_to_be_zipped.append(word_embedding_based_representations)
         char_representations = self.get_char_representations(sentence)
-        cap_embedding_based_representations = \
-            [self.cap_embeddings[cap_id] for cap_id in sentence['cap_ids']]
+        representations_to_be_zipped.append(char_representations)
         morph_tag_based_representations = None
-        combined_word_representations = [dynet.concatenate([x, y, z]) for x, y, z in
-                                         zip(word_embedding_based_representations,
-                                             char_representations,
-                                             cap_embedding_based_representations)]
+        if self.parameters['cap_dim'] > 0:
+            cap_embedding_based_representations = \
+                [self.cap_embeddings[cap_id] for cap_id in sentence['cap_ids']]
+            representations_to_be_zipped.append(cap_embedding_based_representations)
+
+            combined_word_representations = [dynet.concatenate([x, y, z]) for x, y, z in
+                                             zip(*representations_to_be_zipped)]
+        else:
+            combined_word_representations = [dynet.concatenate([x, y]) for x, y in
+                                             zip(*representations_to_be_zipped)]
         # print combined_word_representations
         # print self.parameters
         combined_word_representations = [dynet.dropout(x, p=self.parameters['dropout'])
                                          for x in combined_word_representations]
         context_representations = \
             self.get_sentence_level_bilstm_outputs(combined_word_representations)
-        tag_scores = [dynet.affine_transform([self.last_layer_b.expr(),
-                                              self.last_layer_W.expr(),
-                                              context]) \
-                      for context in context_representations]
-        return tag_scores
+        return context_representations
+
+    def get_morph_analysis_representations(self, sentence):
+
+        try:
+            root_representations = \
+                [[self.char_lstm_layer_for_morph_analysis_roots.transduce([self.char_embeddings[char_id]
+                                                              for char_id in root_char_sequence])[-1]
+                for root_char_sequence in root_as_char_sequences_for_word]
+                for root_as_char_sequences_for_word in sentence['morpho_analyzes_roots']]
+        except IndexError as e:
+            print e
+            print root_char_sequence
+
+        try:
+            morpho_tag_sequence_representations = \
+                [[self.morpho_tag_lstm_layer_for_morph_analysis_tags.transduce([self.morpho_tag_embeddings[morpho_tag_id]
+                                                              for morpho_tag_id in morpho_tag_sequence])[-1]
+                for morpho_tag_sequence in morpho_tag_sequences_for_word]
+                for morpho_tag_sequences_for_word in sentence['morpho_analyzes_tags']]
+        except IndexError as e:
+            print e
+            print morpho_tag_sequence
+
+        tyed_representations_for_every_analysis = \
+            [[self.f_tying_method(root_representation, morpho_tag_representation)
+             for root_representation, morpho_tag_representation in
+                 zip(root_representations_for_word, morpho_tag_representations_for_word)]
+             for root_representations_for_word, morpho_tag_representations_for_word in
+                 zip(root_representations, morpho_tag_sequence_representations)]
+
+        return tyed_representations_for_every_analysis

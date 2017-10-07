@@ -1,3 +1,4 @@
+# coding=utf-8
 import os
 import re
 import codecs
@@ -34,11 +35,11 @@ def load_sentences(path, lower, zeros):
                         max_sentence_length = len(sentence)
                 sentence = []
         else:
-            word = line.split()
-            assert len(word) >= 2
-            sentence.append(word)
-            if len(word[0]) > max_word_length:
-                max_word_length = len(word[0])
+            tokens = line.split()
+            assert len(tokens) >= 2
+            sentence.append(tokens)
+            if len(tokens[0]) > max_word_length:
+                max_word_length = len(tokens[0])
     if len(sentence) > 0:
         if 'DOCSTART' not in sentence[0][0]:
             sentences.append(sentence)
@@ -93,7 +94,9 @@ def char_mapping(sentences):
     """
     Create a dictionary and mapping of characters, sorted by frequency.
     """
-    chars = ["".join([w[0] for w in s]) for s in sentences]
+    chars = ["".join([w[0] + "".join(w[2:-1]) for w in s]) for s in sentences]
+    chars.append("+")
+    chars.append("*")
     dico = create_dico(chars)
     char_to_id, id_to_char = create_mapping(dico)
     print "Found %i unique characters" % len(dico)
@@ -110,18 +113,24 @@ def tag_mapping(sentences):
     print "Found %i unique named entity tags" % len(dico)
     return dico, tag_to_id, id_to_tag
 
-def morpho_tag_mapping(sentences, morpho_tag_type='wo_root', morpho_tag_column_index=1):
+def morpho_tag_mapping(sentences, morpho_tag_type='wo_root', morpho_tag_column_index=1,
+                       joint_learning=False):
     """
     Create a dictionary and a mapping of tags, sorted by frequency.
     """
     if morpho_tag_type == 'char':
         morpho_tags = ["".join([w[morpho_tag_column_index] for w in s]) for s in sentences]
+        morpho_tags += [ww for ww in w[2:-1] for w in s for s in sentences]
     else:
-        morpho_tags = extract_morpho_tags_ordered(morpho_tag_type, sentences, morpho_tag_column_index)
+        morpho_tags = extract_morpho_tags_ordered(morpho_tag_type,
+                                                  sentences, morpho_tag_column_index,
+                                                  joint_learning=joint_learning)
+        ## TODO: xxx
 
     # print morpho_tags
     #morpho_tags = [[word[1].split("+") for word in s] for s in sentences]
     # print morpho_tags
+    morpho_tags.append(["*UNKNOWN*"])
     dico = create_dico(morpho_tags)
     # print dico
     morpho_tag_to_id, id_to_morpho_tag = create_mapping(dico)
@@ -130,53 +139,63 @@ def morpho_tag_mapping(sentences, morpho_tag_type='wo_root', morpho_tag_column_i
     return dico, morpho_tag_to_id, id_to_morpho_tag
 
 
-def extract_morpho_tags_ordered(morpho_tag_type, sentences, morpho_tag_column_index):
+def extract_morpho_tags_ordered(morpho_tag_type,
+                                sentences, morpho_tag_column_index,
+                                joint_learning=False):
     morpho_tags = []
     for s in sentences:
         # print s
         # sys.exit(1)
-        morpho_tags += extract_morpho_tags_from_one_sentence_ordered(morpho_tag_type, [], s, morpho_tag_column_index)
+        morpho_tags += extract_morpho_tags_from_one_sentence_ordered(morpho_tag_type, [],
+                                                                     s, morpho_tag_column_index,
+                                                                     joint_learning=joint_learning)
     return morpho_tags
 
 
-def extract_morpho_tags_from_one_sentence_ordered(morpho_tag_type, morpho_tags, s, morpho_tag_column_index):
+def extract_morpho_tags_from_one_sentence_ordered(morpho_tag_type, morpho_tags,
+                                                  s, morpho_tag_column_index,
+                                                  joint_learning=False):
     assert morpho_tag_column_index in [1, 2], "We expect to 1 or 2"
     for word in s:
-        if morpho_tag_type.startswith('wo_root'):
-            if morpho_tag_type == 'wo_root_after_DB' and morpho_tag_column_index == 1: # this is only applicable to Turkish dataset
-                tmp = []
-                for tag in word[1].split("+")[1:][::-1]:
-                    if tag.endswith("^DB"):
-                        tmp += [tag]
-                        break
-                    else:
-                        tmp += [tag]
-                morpho_tags += [tmp]
-            else:
-                if morpho_tag_column_index == 2: # this means we're reading Czech dataset (it's faulty in a sense)
-                    morpho_tags += [word[morpho_tag_column_index].split("")]
+        if joint_learning:
+            for morpho_analysis in word[1:-1]:
+                morpho_tags += [morpho_analysis.split("+")[1:]]
+        else:
+            if morpho_tag_type.startswith('wo_root'):
+                if morpho_tag_type == 'wo_root_after_DB' and morpho_tag_column_index == 1: # this is only applicable to Turkish dataset
+                    tmp = []
+                    for tag in word[1].split("+")[1:][::-1]:
+                        if tag.endswith("^DB"):
+                            tmp += [tag]
+                            break
+                        else:
+                            tmp += [tag]
+                    morpho_tags += [tmp]
                 else:
-                    morpho_tags += [word[morpho_tag_column_index].split("+")[1:]]
-        elif morpho_tag_type.startswith('with_root'):
-            if morpho_tag_column_index == 1:
-                root = [word[morpho_tag_column_index].split("+")[0]]
-            else:
-                root = [word[1]] # In Czech dataset, the lemma is given in the first column
-            tmp = []
-            tmp += root
-            if morpho_tag_type == 'with_root_after_DB' and morpho_tag_column_index == 1:
-                for tag in word[morpho_tag_column_index].split("+")[1:][::-1]:
-                    if tag.endswith("^DB"):
-                        tmp += [tag]
-                        break
+                    if morpho_tag_column_index == 2: # this means we're reading Czech dataset (it's faulty in a sense)
+                        morpho_tags += [word[morpho_tag_column_index].split("")]
                     else:
-                        tmp += [tag]
-                morpho_tags += [tmp]
-            else:
-                if morpho_tag_column_index == 2:
-                    morpho_tags += [tmp + word[morpho_tag_column_index].split("")]
-                else: # only 1 is possible
-                    morpho_tags += [word[morpho_tag_column_index].split("+")] # I removed the 'tmp +' because it just repeated the first element which is root
+                        morpho_tags += [word[morpho_tag_column_index].split("+")[1:]]
+            elif morpho_tag_type.startswith('with_root'):
+                if morpho_tag_column_index == 1:
+                    root = [word[morpho_tag_column_index].split("+")[0]]
+                else:
+                    root = [word[1]] # In Czech dataset, the lemma is given in the first column
+                tmp = []
+                tmp += root
+                if morpho_tag_type == 'with_root_after_DB' and morpho_tag_column_index == 1:
+                    for tag in word[morpho_tag_column_index].split("+")[1:][::-1]:
+                        if tag.endswith("^DB"):
+                            tmp += [tag]
+                            break
+                        else:
+                            tmp += [tag]
+                    morpho_tags += [tmp]
+                else:
+                    if morpho_tag_column_index == 2:
+                        morpho_tags += [tmp + word[morpho_tag_column_index].split("")]
+                    else: # only 1 is possible
+                        morpho_tags += [word[morpho_tag_column_index].split("+")] # I removed the 'tmp +' because it just repeated the first element which is root
     return morpho_tags
 
 
@@ -238,9 +257,13 @@ def prepare_sentence(str_words, word_to_id, char_to_id, lower=False):
     }
 
 
+def turkish_lower(s):
+    return s.replace(u"IİŞÜĞÖÇ", u"ıişüğöç")
+
+
 def prepare_dataset(sentences, word_to_id, char_to_id, tag_to_id,
-                    global_max_sentence_length, global_max_char_length,
-                    lower=False):
+                    morpho_tag_to_id, lower=False, morpho_tag_type='wo_root',
+                    morpho_tag_column_index=1):
     """
     Prepare the dataset. Return a list of lists of dictionaries containing:
         - word indexes
@@ -261,6 +284,75 @@ def prepare_dataset(sentences, word_to_id, char_to_id, tag_to_id,
         caps = [cap_feature(w) for w in str_words]
         tags = [tag_to_id[w[-1]] for w in s]
 
+        if morpho_tag_type == 'char':
+            str_morpho_tags = [w[morpho_tag_column_index] for w in s]
+            morpho_tags = [[morpho_tag_to_id[c] for c in str_morpho_tag if c in morpho_tag_to_id]
+                 for str_morpho_tag in str_morpho_tags]
+        else:
+            morpho_tags_in_the_sentence = \
+                extract_morpho_tags_from_one_sentence_ordered(morpho_tag_type, [],
+                                                              s, morpho_tag_column_index,
+                                                              joint_learning=False)
+
+            morpho_tags = [[morpho_tag_to_id[morpho_tag] for morpho_tag in ww if morpho_tag in morpho_tag_to_id]
+                           for ww in morpho_tags_in_the_sentence]
+
+        def f_morpho_tag_to_id(m):
+            if m in morpho_tag_to_id:
+                return morpho_tag_to_id[m]
+            else:
+                return morpho_tag_to_id['*UNKNOWN*']
+
+        # for now we ignore different schemes we did in previous morph. tag parses.
+        morph_analyzes_tags = [[map(f_morpho_tag_to_id, analysis.split("+")[1:]) if analysis.split("+")[1:] else [morpho_tag_to_id["*UNKNOWN*"]]
+                                for analysis in w[2:-1]] for w in s]
+
+        def f_char_to_id(c):
+            if c in char_to_id:
+                return char_to_id[c]
+            else:
+                return char_to_id['*']
+
+        morph_analyzes_roots = [[map(f_char_to_id, list(analysis.split("+")[0])) if list(analysis.split("+")[0]) else [char_to_id["+"]]
+                                for analysis in w[2:-1]] for w in s]
+
+        morph_analysis_from_NER_data = [w[morpho_tag_column_index] for w in s]
+        morph_analyzes_from_FST_unprocessed = [w[2:-1] for w in s]
+
+        def remove_Prop_and_lower(s):
+            return turkish_lower(s.replace(u"+Prop", ""))
+
+        golden_analysis_indices = []
+        for w_idx, w in enumerate(s):
+            found = False
+            try:
+                golden_analysis_idx = \
+                    morph_analyzes_from_FST_unprocessed[w_idx]\
+                        .index(morph_analysis_from_NER_data[w_idx])
+                found = True
+            except ValueError as e:
+                # step 1
+                pass
+            if not found:
+                try:
+                    golden_analysis_idx = \
+                        map(remove_Prop_and_lower, morph_analyzes_from_FST_unprocessed[w_idx])\
+                            .index(remove_Prop_and_lower(morph_analysis_from_NER_data[w_idx]))
+                    found = True
+                except ValueError as e:
+                    pass
+            if not found:
+                if len(morph_analyzes_from_FST_unprocessed[w_idx]) == 1:
+                    golden_analysis_idx = 0
+                else:
+                    import random
+                    golden_analysis_idx = random.randint(0, len(morph_analyzes_from_FST_unprocessed[w_idx])-1)
+            if golden_analysis_idx >= len(morph_analyzes_from_FST_unprocessed[w_idx]) or \
+                golden_analysis_idx < 0 or \
+                golden_analysis_idx >= len(morph_analyzes_roots[w_idx]):
+                logging.error("BEEP at golden analysis idx")
+            golden_analysis_indices.append(golden_analysis_idx)
+
         data.append({
             'str_words': str_words,
             'word_ids': words,
@@ -268,6 +360,10 @@ def prepare_dataset(sentences, word_to_id, char_to_id, tag_to_id,
             'char_lengths': [len(char) for char in chars],
             'cap_ids': caps,
             'tag_ids': tags,
+            'morpho_tag_ids': morpho_tags,
+            'morpho_analyzes_tags': morph_analyzes_tags,
+            'morpho_analyzes_roots': morph_analyzes_roots,
+            'golden_morph_analysis_indices': golden_analysis_indices,
             'sentence_lengths': len(s),
             'max_word_length_in_this_sample': max([len(x) for x in chars])
         })

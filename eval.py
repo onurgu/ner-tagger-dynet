@@ -4,7 +4,7 @@
 from __future__ import absolute_import
 from __future__ import division
 
-# from __future__ import print_function
+from collections import defaultdict as dd
 import itertools
 import logging
 import math
@@ -32,7 +32,9 @@ logger = logging.getLogger("eval")
 
 
 
-def eval_once(model, dev_buckets, test_buckets, model_dir_path, run_for_all_checkpoints=False, *args):
+def eval_once(model, dev_buckets, test_buckets, model_dir_path, integration_mode,
+              run_for_all_checkpoints=False,
+              *args):
     """Run Eval once.
 
     Args:
@@ -46,12 +48,15 @@ def eval_once(model, dev_buckets, test_buckets, model_dir_path, run_for_all_chec
     if ckpt:
         if run_for_all_checkpoints:
             for model_checkpoint_path in ckpt.all_model_checkpoint_paths:
-                eval_for_a_checkpoint(model.saver, model, model_checkpoint_path, dev_buckets, test_buckets, *args)
+                eval_for_a_checkpoint(model.saver, model, model_checkpoint_path, dev_buckets, test_buckets,
+                                      integration_mode,
+                                      *args)
         else:
-            eval_for_a_checkpoint(model.saver, model, ckpt.model_checkpoint_path, dev_buckets, test_buckets, *args)
+            eval_for_a_checkpoint(model.saver, model, ckpt.model_checkpoint_path, dev_buckets, test_buckets,
+                                  integration_mode, *args)
 
 
-def eval_for_a_checkpoint(saver, model, model_checkpoint_path, dev_buckets, test_buckets, *args):
+def eval_for_a_checkpoint(saver, model, model_checkpoint_path, dev_buckets, test_buckets, integration_mode, *args):
     if model_checkpoint_path:
         # Restores from checkpoint
         saver.restore(model_checkpoint_path)
@@ -65,14 +70,22 @@ def eval_for_a_checkpoint(saver, model, model_checkpoint_path, dev_buckets, test
         print('No checkpoint file found')
         return
 
-    return eval_with_specific_model(model.model, epoch, dev_buckets, test_buckets, *args)
+    return eval_with_specific_model(model.model, epoch, dev_buckets, test_buckets, integration_mode, *args)
 
 
-def eval_with_specific_model(model, epoch, dev_buckets, test_buckets,
+def eval_with_specific_model(model, epoch, dev_buckets, test_buckets, integration_mode,
                              *args): # FLAGS.eval_dir
+    # type: (MainTaggerModel, object, object, object, object) -> object
     id_to_tag, batch_size, eval_dir, tag_scheme = args
 
     f_scores = {}
+
+    total_correct_disambs = {dataset_label: 0 for dataset_label in ["dev", "test"]}
+    total_disamb_targets = {dataset_label: 0 for dataset_label in ["dev", "test"]}
+    if integration_mode > 0:
+        detailed_correct_disambs = {dataset_label: dd(int) for dataset_label in ["dev", "test"]}
+        detailed_total_target_disambs = {dataset_label: dd(int) for dataset_label in ["dev", "test"]}
+
     for dataset_label, dataset_buckets in [["dev", dev_buckets], ["test", test_buckets]]:
 
         print "Starting to evaluate %s dataset" % dataset_label
@@ -103,14 +116,31 @@ def eval_with_specific_model(model, epoch, dev_buckets, test_buckets,
 
                 for sentence in sentences_in_the_batch:
                     dynet.renew_cg()
-                    tag_scores = model.calculate_tag_scores(sentence)
 
                     sentence_length = len(sentence['word_ids'])
 
-                    loss, decoded_tags = model.crf_module.viterbi_loss(tag_scores, sentence['tag_ids'])
+                    if integration_mode > 0:
+                        selected_morph_analyzes, decoded_tags = model.predict(sentence)
+                    elif integration_mode == 0:
+                        decoded_tags = model.predict(sentence)
 
                     p_tags = [id_to_tag[p_tag] for p_tag in decoded_tags]
                     r_tags = [id_to_tag[p_tag] for p_tag in sentence['tag_ids']]
+
+                    if integration_mode > 0:
+                        n_correct_morph_disambs = \
+                            sum([x == y for x, y, z in zip(selected_morph_analyzes,
+                                                        sentence['golden_morph_analysis_indices'],
+                                                        sentence['morpho_analyzes_tags']) if len(z) > 1])
+                        total_correct_disambs[dataset_label] += n_correct_morph_disambs
+                        total_disamb_targets[dataset_label] += sum([1 for el in sentence['morpho_analyzes_tags'] if len(el) > 1])
+                        for key, value in [(len(el), x == y) for el, x, y in zip(sentence['morpho_analyzes_tags'],
+                                                               selected_morph_analyzes,
+                                                               sentence['golden_morph_analysis_indices'])]:
+                            if value:
+                                detailed_correct_disambs[dataset_label][key] += 1
+                            detailed_total_target_disambs[dataset_label][key] += 1
+                        # total_possible_analyzes += sum([len(el) for el in sentence['morpho_analyzes_tags'] if len(el) > 1])
 
                     if tag_scheme == 'iobes':
                         p_tags = iobes_iob(p_tags)
@@ -122,8 +152,7 @@ def eval_with_specific_model(model, epoch, dev_buckets, test_buckets,
                         predictions.append(new_line)
                         count[y_real, y_pred] += 1
                     predictions.append("")
-
-        # print predictions
+            print ""
 
         # Write predictions to disk and run CoNLL script externally
         eval_id = np.random.randint(1000000, 2000000)
@@ -147,26 +176,28 @@ def eval_with_specific_model(model, epoch, dev_buckets, test_buckets,
             for line in eval_lines:
                 print line
             f_scores[dataset_label] = float(eval_lines[1].split(" ")[-1])
-    return f_scores
 
-def evaluate(model, dev_buckets, test_buckets, FLAGS, opts, *args):
+        if integration_mode > 0:
+            for n_possible_analyzes in map(int, detailed_correct_disambs[dataset_label].keys()):
+                print "%s %d %d/%d" % (dataset_label,
+                                       n_possible_analyzes,
+                                       detailed_correct_disambs[dataset_label][n_possible_analyzes],
+                                       detailed_total_target_disambs[dataset_label][n_possible_analyzes])
+    if integration_mode == 0:
+        return f_scores, {}
+    else:
+        return f_scores, {dataset_label: total_correct_disambs[dataset_label]/float(total_disamb_targets[dataset_label]) for dataset_label in ["dev", "test"]}
+
+def evaluate(model, dev_buckets, test_buckets, opts, *args):
   """Eval CIFAR-10 for a number of steps.""" # with tf.Graph().as_default() as g:
 
-  # Get images and labels for CIFAR-10.
-
-  eval_data = FLAGS.eval_data == 'test'
-
-  # # Build the summary operation based on the TF collection of Summaries.
-  # summary_op = tf.summary.merge_all()
-  #
-  # summary_writer = tf.summary.FileWriter(FLAGS.eval_dir, g)
-
   while True:
-    eval_once(model, dev_buckets, test_buckets, FLAGS.checkpoint_dir, run_for_all_checkpoints=bool(opts.run_for_all_checkpoints), *args)
-    if FLAGS.run_once or opts.run_for_all_checkpoints:
-      break
-    print "Sleeping for %d" % FLAGS.eval_interval_secs
-    time.sleep(FLAGS.eval_interval_secs)
+    eval_once(model, dev_buckets, test_buckets, model.model_path,
+              opts.integration_mode,
+              run_for_all_checkpoints=bool(opts.run_for_all_checkpoints),
+              *args)
+    print "Sleeping for %d" % 600
+    time.sleep(600)
 
 
 def main(argv=None):  # pylint: disable=unused-argument
@@ -330,24 +361,9 @@ def main(argv=None):  # pylint: disable=unused-argument
       batch_size_scalar=batch_size,
       **parameters)
 
-  FLAGS = tf.app.flags.FLAGS
-
-  tf.app.flags.DEFINE_string('eval_dir', event_logs_path,
-                             """Directory where to write event logs.""")
-  tf.app.flags.DEFINE_string('eval_data', 'test',
-                             """Either 'test' or 'train_eval'.""")
-  tf.app.flags.DEFINE_string('checkpoint_dir', model.model_path,
-                             """Directory where to read model checkpoints.""")
-  tf.app.flags.DEFINE_integer('eval_interval_secs', 60 * 5,
-                              """How often to run the eval.""")
-  tf.app.flags.DEFINE_integer('num_examples', 10000,
-                              """Number of examples to run.""")
-  tf.app.flags.DEFINE_boolean('run_once', False,
-                              """Whether to run eval only once.""")
-
   evaluate(model,
            dev_buckets, test_buckets,
-           FLAGS, opts,
+           opts,
            id_to_tag,
            batch_size,
            placeholders,

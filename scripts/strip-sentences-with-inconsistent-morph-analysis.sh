@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+
+awk 'BEGIN { found_in_sentence = 0; } /^$/ { if (found_in_sentence == 1) { print sentence; }; found_in_sentence = 0; sentence = ""; } !/^$/ { if (length(sentence) == 0) { sentence = $0 "\n"; } else { sentence = sentence $0 "\n";}; if (found_in_sentence == 0) { inconsistent = 1; for (i = 3; i <= NF-1; i++) { if ($2 == $i) { inconsistent = 0 } }; if (inconsistent == 1) { found_in_sentence = 1 } } }'
