@@ -60,6 +60,9 @@ def my_config():
     dev_filepath = "turkish/gungor.ner.dev.only_consistent"
     test_filepath = "turkish/gungor.ner.test.only_consistent"
 
+    yuret_train_filepath = "turkish/train.merge.utf8.gungor_format"
+    yuret_test_filepath = "turkish/test.merge.utf8.gungor_format"
+
     embeddings_filepath = "turkish/we-300.txt"
 
 
@@ -89,6 +92,8 @@ def run_a_single_configuration_without_fabric(
                                               train_filepath,
                                               dev_filepath,
                                               test_filepath,
+                                              yuret_train_filepath,
+                                              yuret_test_filepath,
                                               embeddings_filepath,
                                               integration_mode,
                                               reload,
@@ -118,12 +123,17 @@ irect 1 --overwrite-mappings 1 --batch-size 1 --morpho_tag_dim 100 --integration
     always_constant_part = "-T %s/%s " \
           "-d %s/%s " \
           "-t %s/%s " \
+          "--yuret_train %s/%s " \
+          "--yuret_test %s/%s " \
           "%s" \
           "--skip-testing %d " \
           "--tag_scheme iobes " \
           "--maximum-epochs %d " % (datasets_root, train_filepath,
                                     datasets_root, dev_filepath,
-                                    datasets_root, test_filepath, embeddings_part, skip_testing, max_epochs)
+                                    datasets_root, test_filepath,
+                                    datasets_root, yuret_train_filepath,
+                                    datasets_root, yuret_test_filepath,
+                                    embeddings_part, skip_testing, max_epochs)
 
     commandline_args = always_constant_part + \
               "--crf %d " \
@@ -136,7 +146,7 @@ irect 1 --overwrite-mappings 1 --batch-size 1 --morpho_tag_dim 100 --integration
               "--word_dim %d " \
               "--word_lstm_dim %d "\
               "--cap_dim %d "\
-              "--integration_mode %d "\
+              "--integration_mode %d " \
               "--reload %d" % (crf,
                                lr_method,
                                dropout,
@@ -166,7 +176,9 @@ irect 1 --overwrite-mappings 1 --batch-size 1 --morpho_tag_dim 100 --integration
     model_path = get_model_subpath(parameters)
     print model_path
 
-    for task_name in ["NER", "MORPH"]:
+    task_names = ["NER", "MORPH", "YURET"]
+
+    for task_name in task_names:
         _run.info["%s_dev_f_score" % task_name] = dict()
         _run.info["%s_test_f_score" % task_name] = dict()
 
@@ -190,7 +202,7 @@ irect 1 --overwrite-mappings 1 --batch-size 1 --morpho_tag_dim 100 --integration
         """
         NER Epoch: %d Best dev and accompanying test score, best_dev, best_test: %lf %lf 
         """
-        for task_name in ["NER", "MORPH"]:
+        for task_name in task_names:
             m = re.match("^%s Epoch: (\d+) .* best_dev, best_test: (.+) (.+)$" % task_name, line)
             if m:
                 epoch = int(m.group(1))

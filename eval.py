@@ -73,20 +73,21 @@ def eval_for_a_checkpoint(saver, model, model_checkpoint_path, dev_buckets, test
     return eval_with_specific_model(model.model, epoch, dev_buckets, test_buckets, integration_mode, *args)
 
 
-def eval_with_specific_model(model, epoch, dev_buckets, test_buckets, integration_mode,
+def eval_with_specific_model(model, epoch, buckets_list, integration_mode,
                              *args): # FLAGS.eval_dir
-    # type: (MainTaggerModel, object, object, object, object) -> object
+    # type: (MainTaggerModel, int, list, object, object) -> object
     id_to_tag, batch_size, eval_dir, tag_scheme = args
 
     f_scores = {}
+    dataset_labels = ["dev", "test", "yuret"]
 
-    total_correct_disambs = {dataset_label: 0 for dataset_label in ["dev", "test"]}
-    total_disamb_targets = {dataset_label: 0 for dataset_label in ["dev", "test"]}
+    total_correct_disambs = {dataset_label: 0 for dataset_label in dataset_labels}
+    total_disamb_targets = {dataset_label: 0 for dataset_label in dataset_labels}
     if integration_mode > 0:
-        detailed_correct_disambs = {dataset_label: dd(int) for dataset_label in ["dev", "test"]}
-        detailed_total_target_disambs = {dataset_label: dd(int) for dataset_label in ["dev", "test"]}
+        detailed_correct_disambs = {dataset_label: dd(int) for dataset_label in dataset_labels}
+        detailed_total_target_disambs = {dataset_label: dd(int) for dataset_label in dataset_labels}
 
-    for dataset_label, dataset_buckets in [["dev", dev_buckets], ["test", test_buckets]]:
+    for dataset_label, dataset_buckets in buckets_list:
 
         print "Starting to evaluate %s dataset" % dataset_label
         predictions = []
@@ -186,7 +187,7 @@ def eval_with_specific_model(model, epoch, dev_buckets, test_buckets, integratio
     if integration_mode == 0:
         return f_scores, {}
     else:
-        return f_scores, {dataset_label: total_correct_disambs[dataset_label]/float(total_disamb_targets[dataset_label]) for dataset_label in ["dev", "test"]}
+        return f_scores, {dataset_label: total_correct_disambs[dataset_label]/float(total_disamb_targets[dataset_label]) for dataset_label in dataset_labels}
 
 def evaluate(model, dev_buckets, test_buckets, opts, *args):
   """Eval CIFAR-10 for a number of steps.""" # with tf.Graph().as_default() as g:

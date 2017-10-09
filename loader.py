@@ -58,7 +58,7 @@ def update_tag_scheme(sentences, tag_scheme):
         # Check that tags are given in the IOB format
         if not iob2(tags):
             s_str = '\n'.join(' '.join(w) for w in s)
-            print s_str
+            print s_str.encode("utf8")
             raise Exception('Sentences should be given in IOB format! ' +
                             'Please check sentence %i:\n%s' % (i, s_str))
         if tag_scheme == 'iob':
