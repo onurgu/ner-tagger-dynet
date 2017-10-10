@@ -359,6 +359,10 @@ def read_args(evaluation=False, args_as_a_list=sys.argv[1:]):
         help="yuret test set location"
     )
     optparser.add_option(
+        "--train_with_yuret", default=False, action="store_true",
+        help="train with yuret training set"
+    )
+    optparser.add_option(
         "-s", "--tag_scheme", default="iobes",
         help="Tagging scheme (IOB or IOBES)"
     )
@@ -500,6 +504,7 @@ def form_parameters_dict(opts):
     parameters['mt_ci'] = opts.morpho_tag_column_index
     parameters['integration_mode'] = opts.integration_mode
     parameters['tying_method'] = opts.tying_method
+    parameters['train_with_yuret'] = opts.train_with_yuret
 
     parameters['word_dim'] = opts.word_dim
     parameters['word_lstm_dim'] = opts.word_lstm_dim

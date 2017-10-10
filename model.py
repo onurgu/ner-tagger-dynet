@@ -491,7 +491,7 @@ class MainTaggerModel(object):
         else:
             return decoded_tags
 
-    def get_loss(self, sentences_in_the_batch):
+    def get_loss(self, sentences_in_the_batch, gungor_data=True):
         # immediate_compute=True, check_validity=True
         dynet.renew_cg()
         loss_array = []
@@ -518,18 +518,18 @@ class MainTaggerModel(object):
             last_layer_context_representations, md_loss, _ = \
                 self.get_last_layer_context_representations(sentence,
                                                             context_representations)
+            if gungor_data:
+                tag_scores = self.calculate_tag_scores(last_layer_context_representations)
 
-            tag_scores = self.calculate_tag_scores(last_layer_context_representations)
+                crf_loss = self.crf_module.neg_log_loss(tag_scores, sentence['tag_ids'])
 
-            crf_loss = self.crf_module.neg_log_loss(tag_scores, sentence['tag_ids'])
-
-            if crf_loss.value() > 1000:
-                logging.error("BEER")
+                if crf_loss.value() > 1000:
+                    logging.error("BEER")
+                loss_array.append(crf_loss)
 
             if self.parameters['integration_mode'] > 0:
                 loss_array.append(md_loss)
 
-            loss_array.append(crf_loss)
         return dynet.esum(loss_array)
 
     def calculate_tag_scores(self, context_representations):

@@ -5,6 +5,8 @@ import logging
 import sys
 import time
 
+from functools import partial
+
 import math
 import os
 
@@ -229,31 +231,57 @@ for epoch in xrange(n_epochs):
 
     permuted_bucket_ids = np.random.permutation(range(len(train_buckets)))
 
-    for bucket_id in list(permuted_bucket_ids):
-
-        bucket_data = train_buckets[bucket_id]
-
+    def get_loss_for_bucket_data(bucket_id, bucket_data, count,
+                                 loss_function=partial(model.get_loss, gungor_data=True),
+                                 label="G"):
         n_batches = int(math.ceil(float(len(bucket_data)) / batch_size))
 
         print "bucket_id: %d, n_batches: %d" % (bucket_id, n_batches)
+
+        losses_of_this_bucket = []
 
         for batch_idx in range(n_batches):
             count += batch_size
 
             sentences_in_the_batch = bucket_data[(batch_idx*batch_size):((batch_idx+1)*batch_size)]
 
-            loss = model.get_loss(sentences_in_the_batch)
-            if loss.value()/batch_size >= (10000000000.0 - 1):
-                logging.error("BEEP")
-            epoch_costs.append(loss.value()/batch_size)
+            loss = loss_function(sentences_in_the_batch)
             loss.backward()
             model.trainer.update()
+            if loss.value()/batch_size >= (10000000000.0 - 1):
+                logging.error("BEEP")
+            losses_of_this_bucket.append(loss.value()/batch_size)
+            # epoch_costs.append(loss.value()/batch_size)
             if count % 50 == 0 and count != 0:
-                sys.stdout.write("%f " % np.mean(epoch_costs[-50:]))
+                sys.stdout.write("%s%f " % (label, np.mean(losses_of_this_bucket[-50:])))
                 sys.stdout.flush()
                 if np.mean(epoch_costs[-50:]) > 100:
                     logging.error("BEEP")
+
+        return losses_of_this_bucket
+
+    count = 0
+    yuret_count = 0
+
+    for bucket_id in list(permuted_bucket_ids):
+
+        # train on gungor_data
+        bucket_data = train_buckets[bucket_id]
+
+
+        get_loss_for_bucket_data(bucket_id, bucket_data, count)
+        print ""
+
+        if model.parameters['train_with_yuret']:
+            # train on yuret data
+            yuret_bucket_data = yuret_train_buckets[bucket_id]
+
+            get_loss_for_bucket_data(bucket_id, yuret_bucket_data, yuret_count,
+                                     loss_function=partial(model.get_loss, gungor_data=False),
+                                     label="Y")
+            print ""
         model.trainer.status()
+
     print ""
     f_scores, morph_accuracies = eval_with_specific_model(model, epoch, [("dev", dev_buckets),
                                                                          ("test", test_buckets),
