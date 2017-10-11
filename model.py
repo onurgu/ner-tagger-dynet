@@ -206,9 +206,13 @@ class MainTaggerModel(object):
         return last_layer_context_representations, md_loss, selected_morph_analysis_representations
 
     def get_morph_analysis_scores(self, morph_analysis_representations, context_representations):
+
+        def sum_and_tanh(context):
+            return dynet.tanh(dynet.sum_cols(dynet.reshape(context, (self.parameters['word_lstm_dim'], 2))))
+
         morph_analysis_scores = \
             [dynet.softmax(
-                dynet.concatenate([dynet.dot_product(morph_analysis_representation, context) # sum + tanh for context[:half] and contet[half:]
+                dynet.concatenate([dynet.dot_product(morph_analysis_representation, sum_and_tanh(context)) # sum + tanh for context[:half] and contet[half:]
                                    for morph_analysis_representation in
                                    morph_analysis_representations[word_pos]]))
                 for word_pos, context in enumerate(context_representations)]
