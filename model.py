@@ -208,7 +208,7 @@ class MainTaggerModel(object):
     def get_morph_analysis_scores(self, morph_analysis_representations, context_representations):
         morph_analysis_scores = \
             [dynet.softmax(
-                dynet.concatenate([dynet.dot_product(morph_analysis_representation, context)
+                dynet.concatenate([dynet.dot_product(morph_analysis_representation, context) # sum + tanh for context[:half] and contet[half:]
                                    for morph_analysis_representation in
                                    morph_analysis_representations[word_pos]]))
                 for word_pos, context in enumerate(context_representations)]
@@ -569,10 +569,23 @@ class MainTaggerModel(object):
 
     def get_morph_analysis_representations(self, sentence):
 
+        def _create_get_representation(obj, es):
+            representations = []
+            for e in es:
+                dynet.ensure_freshness(e)
+            for (fb, bb) in obj.builder_layers:
+                fs = fb.initial_state().transduce(es)
+                bs = bb.initial_state().transduce(reversed(es))
+                es = [dynet.concatenate([f, b]) for f, b in zip(fs, reversed(bs))]
+                representations.append(dynet.rectify(dynet.concatenate([fs[-1], bs[-1]])))
+            return representations
+
+        BiRNNBuilder.get_representation = _create_get_representation
+
         try:
             root_representations = \
-                [[self.char_lstm_layer_for_morph_analysis_roots.transduce([self.char_embeddings[char_id]
-                                                              for char_id in root_char_sequence])[-1]
+                [[self.char_lstm_layer_for_morph_analysis_roots.get_representation([self.char_embeddings[char_id]
+                                                              for char_id in root_char_sequence])[0]
                 for root_char_sequence in root_as_char_sequences_for_word]
                 for root_as_char_sequences_for_word in sentence['morpho_analyzes_roots']]
         except IndexError as e:
@@ -581,8 +594,8 @@ class MainTaggerModel(object):
 
         try:
             morpho_tag_sequence_representations = \
-                [[self.morpho_tag_lstm_layer_for_morph_analysis_tags.transduce([self.morpho_tag_embeddings[morpho_tag_id]
-                                                              for morpho_tag_id in morpho_tag_sequence])[-1]
+                [[self.morpho_tag_lstm_layer_for_morph_analysis_tags.get_representation([self.morpho_tag_embeddings[morpho_tag_id]
+                                                              for morpho_tag_id in morpho_tag_sequence])[0]
                 for morpho_tag_sequence in morpho_tag_sequences_for_word]
                 for morpho_tag_sequences_for_word in sentence['morpho_analyzes_tags']]
         except IndexError as e:
