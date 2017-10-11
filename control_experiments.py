@@ -63,6 +63,8 @@ def my_config():
     yuret_train_filepath = "turkish/train.merge.utf8.gungor_format"
     yuret_test_filepath = "turkish/test.merge.utf8.gungor_format"
 
+    train_with_yuret = 0
+
     embeddings_filepath = "turkish/we-300.txt"
 
 
@@ -94,6 +96,7 @@ def run_a_single_configuration_without_fabric(
                                               test_filepath,
                                               yuret_train_filepath,
                                               yuret_test_filepath,
+                                              train_with_yuret,
                                               embeddings_filepath,
                                               integration_mode,
                                               reload,
@@ -109,6 +112,9 @@ irect 1 --overwrite-mappings 1 --batch-size 1 --morpho_tag_dim 100 --integration
     execution_part = "python train.py --overwrite-mappings 1 "
     if dynet_gpu == 1:
         execution_part += "--dynet-gpu 1 "
+
+    if train_with_yuret == 1:
+        execution_part += "--train_with_yuret "
 
     if word_dim == 0:
         embeddings_part = ""
