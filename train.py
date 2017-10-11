@@ -255,7 +255,7 @@ for epoch in xrange(n_epochs):
             if count % 50 == 0 and count != 0:
                 sys.stdout.write("%s%f " % (label, np.mean(losses_of_this_bucket[-50:])))
                 sys.stdout.flush()
-                if np.mean(epoch_costs[-50:]) > 100:
+                if np.mean(losses_of_this_bucket[-50:]) > 100:
                     logging.error("BEEP")
 
         return losses_of_this_bucket
@@ -269,14 +269,14 @@ for epoch in xrange(n_epochs):
         bucket_data = train_buckets[bucket_id]
 
 
-        get_loss_for_bucket_data(bucket_id, bucket_data, count)
+        epoch_costs += get_loss_for_bucket_data(bucket_id, bucket_data, count)
         print ""
 
         if model.parameters['train_with_yuret']:
             # train on yuret data
             yuret_bucket_data = yuret_train_buckets[bucket_id]
 
-            get_loss_for_bucket_data(bucket_id, yuret_bucket_data, yuret_count,
+            epoch_costs += get_loss_for_bucket_data(bucket_id, yuret_bucket_data, yuret_count,
                                      loss_function=partial(model.get_loss, gungor_data=False),
                                      label="Y")
             print ""
