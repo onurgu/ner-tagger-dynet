@@ -208,7 +208,7 @@ class MainTaggerModel(object):
     def get_morph_analysis_scores(self, morph_analysis_representations, context_representations):
 
         def sum_and_tanh(context):
-            return dynet.tanh(dynet.sum_cols(dynet.reshape(context, (self.parameters['word_lstm_dim'], 2))))
+            return dynet.tanh(dynet.sum_cols(dynet.reshape(context, (int(self.parameters['word_lstm_dim']/2), 2))))
 
         morph_analysis_scores = \
             [dynet.softmax(
@@ -255,6 +255,20 @@ class MainTaggerModel(object):
         """
         Build the network.
         """
+
+        def _create_get_representation(obj, es):
+            representations = []
+            # for e in es:
+            #     dynet.ensure_freshness(e)
+            for (fb, bb) in obj.builder_layers:
+                fs = fb.initial_state().transduce(es)
+                bs = bb.initial_state().transduce(reversed(es))
+                es = [dynet.concatenate([f, b]) for f, b in zip(fs, reversed(bs))]
+                representations.append(dynet.rectify(dynet.concatenate([fs[-1], bs[-1]])))
+            return representations
+
+        BiRNNBuilder.get_representation = _create_get_representation
+
         # Training parameters
         n_words = len(self.id_to_word)
         n_chars = len(self.id_to_char)
@@ -379,6 +393,20 @@ class MainTaggerModel(object):
                                     mt_d,
                                     2 * mt_d,
                                     bilstm=True)
+
+        if self.parameters['use_golden_morpho_analysis_in_word_representation']:
+
+            if self.parameters['integration_mode'] == 0:
+                self.morpho_tag_embeddings = self.model.add_lookup_parameters((n_morpho_tags, mt_d),
+                                                                              name="charembeddings")
+
+            self.old_style_morpho_tag_lstm_layer_for_golden_morpho_analyzes = \
+                create_bilstm_layer("old_style_morpho_tag_lstm_layer_for_golden_morpho_analyzes",
+                                    mt_d,
+                                    2 * mt_d,
+                                    bilstm=True)
+
+            word_representation_dim += 2 * mt_d
 
         #
         # Capitalization feature
@@ -528,7 +556,7 @@ class MainTaggerModel(object):
                 crf_loss = self.crf_module.neg_log_loss(tag_scores, sentence['tag_ids'])
 
                 if crf_loss.value() > 1000:
-                    logging.error("BEER")
+                    logging.error("BEEP")
                 loss_array.append(crf_loss)
 
             if self.parameters['integration_mode'] > 0:
@@ -544,25 +572,34 @@ class MainTaggerModel(object):
                       for context in context_representations]
         return tag_scores
 
+    def get_morph_analysis_representation_in_old_style(self, sentence):
+        # these morpho_tag_ids are either chars or tags depending on the morpho_tag_type
+        return [self.old_style_morpho_tag_lstm_layer_for_golden_morpho_analyzes\
+                    .get_representation([self.morpho_tag_embeddings[morpho_tag_id] for morpho_tag_id in morpho_tag_sequence])[0]
+                for morpho_tag_sequence in sentence['morpho_tag_ids']]
+
     def get_context_representations(self, sentence):
 
         representations_to_be_zipped = []
         word_embedding_based_representations = \
             [self.word_embeddings[word_id] for word_id in sentence['word_ids']]
-        representations_to_be_zipped.append(word_embedding_based_representations)
+        representations_to_be_zipped.append(dynet.concatenate([dynet.transpose(x) for x in word_embedding_based_representations]))
         char_representations = self.get_char_representations(sentence)
-        representations_to_be_zipped.append(char_representations)
-        morph_tag_based_representations = None
+        representations_to_be_zipped.append(dynet.concatenate([dynet.transpose(x) for x in char_representations]))
+        if self.parameters['use_golden_morpho_analysis_in_word_representation']:
+            morph_tag_based_representations = self.get_morph_analysis_representation_in_old_style(sentence)
+            representations_to_be_zipped.append(dynet.concatenate([dynet.transpose(x) for x in morph_tag_based_representations]))
         if self.parameters['cap_dim'] > 0:
             cap_embedding_based_representations = \
                 [self.cap_embeddings[cap_id] for cap_id in sentence['cap_ids']]
-            representations_to_be_zipped.append(cap_embedding_based_representations)
+            representations_to_be_zipped.append(dynet.concatenate([dynet.transpose(x) for x in cap_embedding_based_representations]))
+            # combined_word_representations = [dynet.concatenate([x, y, z, xx]) for x, y, z, xx in
+            #                                  zip(*representations_to_be_zipped)]
+        # else:
+            # combined_word_representations = [dynet.concatenate([x, y, xx]) for x, y, xx in
+            #                                  zip(*representations_to_be_zipped)]
 
-            combined_word_representations = [dynet.concatenate([x, y, z]) for x, y, z in
-                                             zip(*representations_to_be_zipped)]
-        else:
-            combined_word_representations = [dynet.concatenate([x, y]) for x, y in
-                                             zip(*representations_to_be_zipped)]
+        combined_word_representations = dynet.concatenate_cols(representations_to_be_zipped)
         # print combined_word_representations
         # print self.parameters
         combined_word_representations = [dynet.dropout(x, p=self.parameters['dropout'])
@@ -572,19 +609,6 @@ class MainTaggerModel(object):
         return context_representations
 
     def get_morph_analysis_representations(self, sentence):
-
-        def _create_get_representation(obj, es):
-            representations = []
-            for e in es:
-                dynet.ensure_freshness(e)
-            for (fb, bb) in obj.builder_layers:
-                fs = fb.initial_state().transduce(es)
-                bs = bb.initial_state().transduce(reversed(es))
-                es = [dynet.concatenate([f, b]) for f, b in zip(fs, reversed(bs))]
-                representations.append(dynet.rectify(dynet.concatenate([fs[-1], bs[-1]])))
-            return representations
-
-        BiRNNBuilder.get_representation = _create_get_representation
 
         try:
             root_representations = \

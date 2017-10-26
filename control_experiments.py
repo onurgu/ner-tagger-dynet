@@ -24,21 +24,22 @@ def my_config():
     learning_rate = 0.01
 
     crf = 1
-    lr_method = "sgd-learning_rate_float@%lf" % learning_rate
+    # lr_method = "sgd-learning_rate_float@%lf" % learning_rate
+    lr_method = "adam"
     dropout = 0.5
-    char_dim = 128
-    char_lstm_dim = 128
+    char_dim = 64
+    char_lstm_dim = 64
 
-    morpho_tag_dim = 128
-    morpho_tag_lstm_dim = 128
-    morpho_tag_type = "wo_root"
+    morpho_tag_dim = 64
+    morpho_tag_lstm_dim = 64
+    morpho_tag_type = "char"
 
     morpho_tag_column_index = 1
 
     integration_mode = 0
 
     word_dim = 128
-    word_lstm_dim = 128
+    word_lstm_dim = 256
     cap_dim = 0
 
     # char_dim = 200
@@ -64,6 +65,8 @@ def my_config():
     yuret_test_filepath = "turkish/test.merge.utf8.gungor_format"
 
     train_with_yuret = 0
+
+    use_golden_morpho_analysis_in_word_representation = 0
 
     embeddings_filepath = "turkish/we-300.txt"
 
@@ -97,6 +100,7 @@ def run_a_single_configuration_without_fabric(
                                               yuret_train_filepath,
                                               yuret_test_filepath,
                                               train_with_yuret,
+                                              use_golden_morpho_analysis_in_word_representation,
                                               embeddings_filepath,
                                               integration_mode,
                                               reload,
@@ -115,6 +119,9 @@ irect 1 --overwrite-mappings 1 --batch-size 1 --morpho_tag_dim 100 --integration
 
     if train_with_yuret == 1:
         execution_part += "--train_with_yuret "
+
+    if use_golden_morpho_analysis_in_word_representation == 1:
+        execution_part += "--use_golden_morpho_analysis_in_word_representation "
 
     if word_dim == 0:
         embeddings_part = ""
@@ -139,7 +146,8 @@ irect 1 --overwrite-mappings 1 --batch-size 1 --morpho_tag_dim 100 --integration
                                     datasets_root, test_filepath,
                                     datasets_root, yuret_train_filepath,
                                     datasets_root, yuret_test_filepath,
-                                    embeddings_part, skip_testing, max_epochs)
+                                    embeddings_part,
+                                    skip_testing, max_epochs)
 
     commandline_args = always_constant_part + \
               "--crf %d " \

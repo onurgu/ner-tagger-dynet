@@ -363,6 +363,10 @@ def read_args(evaluation=False, args_as_a_list=sys.argv[1:]):
         help="train with yuret training set"
     )
     optparser.add_option(
+        "--use_golden_morpho_analysis_in_word_representation", default=False, action="store_true",
+        help="use golden morpho analysis when representing words"
+    )
+    optparser.add_option(
         "-s", "--tag_scheme", default="iobes",
         help="Tagging scheme (IOB or IOBES)"
     )
@@ -400,7 +404,7 @@ def read_args(evaluation=False, args_as_a_list=sys.argv[1:]):
         type='int', help="Use a bidirectional LSTM for morpho tags"
     )
     optparser.add_option(
-        "--morpho_tag_type", default="wo_root",
+        "--morpho_tag_type", default="char",
         help="Mode of morphological tag extraction"
     )
     optparser.add_option(
@@ -505,6 +509,7 @@ def form_parameters_dict(opts):
     parameters['integration_mode'] = opts.integration_mode
     parameters['tying_method'] = opts.tying_method
     parameters['train_with_yuret'] = opts.train_with_yuret
+    parameters['use_golden_morpho_analysis_in_word_representation'] = opts.use_golden_morpho_analysis_in_word_representation
 
     parameters['word_dim'] = opts.word_dim
     parameters['word_lstm_dim'] = opts.word_lstm_dim
