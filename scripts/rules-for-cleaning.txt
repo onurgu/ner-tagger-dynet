@@ -1,0 +1,27 @@
+
+2
+X'ın X'ın+Noun+Prop+A3sg+Pnon+Nom X+Noun+Prop+A3sg+P2sg+Nom X+Noun+Prop+A3sg+Pnon+Gen ==== X+Noun+Prop+A3sg+Pnon+Gen
+X'in X'in+Noun+Prop+A3sg+Pnon+Nom X+Noun+Prop+A3sg+P2sg+Nom X+Noun+Prop+A3sg+Pnon+Gen ==== X+Noun+Prop+A3sg+Pnon+Gen
+X'un X'un+Noun+Prop+A3sg+Pnon+Nom X+Noun+Prop+A3sg+P2sg+Nom X+Noun+Prop+A3sg+Pnon+Gen ==== X+Noun+Prop+A3sg+Pnon+Gen
+X'nın X'nın+Noun+Prop+A3sg+Pnon+Nom X+Noun+Prop+A3sg+P2sg+Gen X+Noun+Prop+A3sg+Pnon+Gen ==== X+Noun+Prop+A3sg+Pnon+Gen
+Xcu Xcu+Noun+A3sg+Pnon+Nom X+Noun+A3sg+Pnon+Nom^DB+Adj+Agt X+Noun+A3sg+Pnon+Nom^DB+Noun+Agt+A3sg+Pnon+Nom ==== X+Noun+A3sg+Pnon+Nom^DB+Adj+Agt
+Xçı Xçı+Noun+A3sg+Pnon+Nom X+Noun+A3sg+Pnon+Nom^DB+Adj+Agt X+Noun+A3sg+Pnon+Nom^DB+Noun+Agt+A3sg+Pnon+Nom ==== X+Noun+A3sg+Pnon+Nom^DB+Adj+Agt
+Xcı Xcı+Noun+A3sg+Pnon+Nom X+Noun+A3sg+Pnon+Nom^DB+Adj+Agt X+Noun+A3sg+Pnon+Nom^DB+Noun+Agt+A3sg+Pnon+Nom ==== X+Noun+A3sg+Pnon+Nom^DB+Adj+Agt
+Xci Xci+Noun+A3sg+Pnon+Nom X+Noun+A3sg+Pnon+Nom^DB+Adj+Agt X+Noun+A3sg+Pnon+Nom^DB+Noun+Agt+A3sg+Pnon+Nom ==== X+Noun+A3sg+Pnon+Nom^DB+Adj+Agt
+Xçi Xçi+Noun+A3sg+Pnon+Nom X+Noun+A3sg+Pnon+Nom^DB+Adj+Agt X+Noun+A3sg+Pnon+Nom^DB+Noun+Agt+A3sg+Pnon+Nom ==== X+Noun+A3sg+Pnon+Nom^DB+Adj+Agt
+Xlardır X+Noun+A3sg+Pnon+Nom^DB+Verb+Zero+Pres+A3pl+Cop X+Noun+A3pl+Pnon+Nom^DB+Adverb+Since X+Noun+A3pl+Pnon+Nom^DB+Verb+Zero+Pres+Cop+A3sg ==== X+Noun+A3pl+Pnon+Nom^DB+Verb+Zero+Pres+Cop+A3sg
+Xdır X+Adj^DB+Verb+Zero+Pres+A3sg+Cop X+Adj^DB+Verb+Zero+Pres+Cop+A3sg X+Verb^DB+Verb+Caus+Pos+Imp+A2sg ==== X+Adj^DB+Verb+Zero+Pres+Cop+A3sg
+
+Xr Xr+Postp+PCNom Xr+Noun+A3sg+Pnon+Nom Xr+Postp+PCDat ==== Xr+Postp+PCDat
+
+Xmektedir X+Verb+Pos+Prog2+A3sg+Cop X+Verb+Pos+Prog2+Cop+A3sg X+Verb+Pos^DB+Noun+Inf1+A3sg+Pnon+Loc^DB+Verb+Zero+Pres+Cop+A3sg
+
+değil değil+Verb+Neg+Pres+A3sg değ+Verb^DB+Verb+Pass+Pos+Imp+A2sg değil+Conj değil+Verb+Pres+A3sg
+
+Xil Xil+Verb+Neg+Pres+A3sg X+Verb^DB+Verb+Pass+Pos+Imp+A2sg Xil+Conj Xil+Verb+Pres+A3sg
+
+CHOOSE Xil+Conj
+
+97 0 4 Xdır X+Noun+A3sg+Pnon+Nom^DB+Verb+Zero+Pres+A3sg+Cop X+Noun+A3sg+Pnon+Nom^DB+Adverb+Since X+Noun+A3sg+Pnon+Nom^DB+Verb+Zero+Pres+Cop+A3sg X+Verb^DB+Verb+Caus+Pos+Imp+A2sg
+
+CHOOSE X+Noun+A3sg+Pnon+Nom^DB+Verb+Zero+Pres+Cop+A3sg
