@@ -3,12 +3,15 @@
 declare -A n_consistent_lines
 declare -A n_consistent_sentences
 
+# initial operations
 for label in train dev test ; do
 	cp dataset/gungor.ner.${label} dataset/gungor.ner.${label}.01
 
 	echo starting sentences $label $(cat dataset/gungor.ner.${label}.01 | awk '/^$/ { count += 1 } END { print count }')
 
-	cat dataset/gungor.ner.${label}.01 | bash ./scripts/strip-sentences-with-inconsistent-morph-analysis.sh > dataset/gungor.ner.${label}.01.only_consistent ;
+	cat dataset/gungor.ner.${label}.01 | python ./scripts/lowercase-root-surface-forms.py > dataset/gungor.ner.${label}.01a
+
+	cat dataset/gungor.ner.${label}.01a | bash ./scripts/strip-sentences-with-inconsistent-morph-analysis.sh > dataset/gungor.ner.${label}.01.only_consistent ;
 	n_consistent_lines[$label]=$(wc -l dataset/gungor.ner.${label}.01.only_consistent | cut -d" " -f1)
 	n_consistent_sentences[$label]=$(cat dataset/gungor.ner.${label}.01.only_consistent | awk '/^$/ { count += 1 } END { print count }')
 	# printf "%s %02d %6d %6d\n" $label 0 ${n_consistent_lines[$label]} ${n_consistent_sentences[$label]}
@@ -36,7 +39,7 @@ for n_analyzes in `seq 1 13`; do
 		for label in train dev test ; do
 #			 echo $label
 			if [[ ${n_analyzes} == 1 ]]; then
-				cat dataset/gungor.ner.${label}.`printf "%02d" ${n_analyzes}` | awk 'NF == 4 { print $1, $3, $3, $4 } NF != 4 { print }' > dataset/gungor.ner.${label}.`printf "%02d" $((n_analyzes+1))`
+				cat dataset/gungor.ner.${label}.01a | awk 'NF == 4 { print $1, $3, $3, $4 } NF != 4 { print }' > dataset/gungor.ner.${label}.`printf "%02d" $((n_analyzes+1))`
 				n_lines_changed[$label]=-1
 			else
 				sed -f Xoutput-n_analyses-`printf "%02d" ${n_analyzes}`.txt.rules.sed dataset/gungor.ner.${label}.`printf "%02d" ${n_analyzes}` > dataset/gungor.ner.${label}.`printf "%02d" $((n_analyzes+1))`
@@ -63,7 +66,11 @@ for n_analyzes in `seq 1 13`; do
 		${n_lines_changed['test']} ${n_consistent_lines['test']} ${n_consistent_sentences['test']}
 	else
 		for label in train dev test ; do
-			cp dataset/gungor.ner.${label}.`printf "%02d" ${n_analyzes}` dataset/gungor.ner.${label}.`printf "%02d" $((n_analyzes+1))`
+			if [[ ${n_analyzes} == 1 ]]; then
+				cp dataset/gungor.ner.${label}.01a dataset/gungor.ner.${label}.`printf "%02d" $((n_analyzes+1))`
+			else
+				cp dataset/gungor.ner.${label}.`printf "%02d" ${n_analyzes}` dataset/gungor.ner.${label}.`printf "%02d" $((n_analyzes+1))`
+			fi
 
 			cat dataset/gungor.ner.${label}.`printf "%02d" $((n_analyzes+1))` | bash ./scripts/strip-sentences-with-inconsistent-morph-analysis.sh > dataset/gungor.ner.${label}.`printf "%02d" $((n_analyzes+1))`.only_consistent ;
 			n_consistent_lines[$label]=$(wc -l dataset/gungor.ner.${label}.`printf "%02d" $((n_analyzes+1))`.only_consistent | cut -d" " -f1)
