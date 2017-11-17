@@ -374,6 +374,27 @@ def read_args(evaluation=False, args_as_a_list=sys.argv[1:]):
         "-b", "--char_bidirect", default="1",
         type='int', help="Use a bidirectional LSTM for chars"
     )
+    # morpho_tag section
+    optparser.add_option(
+        "--morpho_tag_dim", default="0",
+        type='int', help="Morpho tag embedding dimension"
+    )
+    optparser.add_option(
+        "--morpho_tag_lstm_dim", default="100",
+        type='int', help="Morpho tag LSTM hidden layer size"
+    )
+    optparser.add_option(
+        "--morpho_tag_bidirect", default="1",
+        type='int', help="Use a bidirectional LSTM for morpho tags"
+    )
+    optparser.add_option(
+        "--morpho_tag_type", default="char",
+        help="Mode of morphological tag extraction"
+    )
+    optparser.add_option(
+        "--morpho-tag-column-index", default="1",
+        type='int', help="the index of the column which contains the morphological tags in the conll format"
+    )
     optparser.add_option(
         "-w", "--word_dim", default="100",
         type='int', help="Token embedding dimension"
@@ -456,6 +477,11 @@ def form_parameters_dict(opts):
     parameters['char_dim'] = opts.char_dim
     parameters['char_lstm_dim'] = opts.char_lstm_dim
     parameters['ch_b'] = opts.char_bidirect == 1
+
+    # morpho_tag section
+    parameters['mt_d'] = opts.morpho_tag_dim
+    parameters['mt_t'] = opts.morpho_tag_type
+    parameters['mt_ci'] = opts.morpho_tag_column_index
 
     parameters['word_dim'] = opts.word_dim
     parameters['word_lstm_dim'] = opts.word_lstm_dim

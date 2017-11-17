@@ -70,13 +70,14 @@ class MainTaggerModel(object):
             self.reload_mappings()
         self.components = {}
 
-    def save_mappings(self, id_to_word, id_to_char, id_to_tag):
+    def save_mappings(self, id_to_word, id_to_char, id_to_tag, id_to_morpho_tag):
         """
         We need to save the mappings if we want to use the model later.
         """
         self.id_to_word = id_to_word
         self.id_to_char = id_to_char
         self.id_to_tag = id_to_tag
+        self.id_to_morpho_tag = id_to_morpho_tag
 
         if self.overwrite_mappings:
             with open(self.mappings_path, 'wb') as f:
@@ -84,6 +85,7 @@ class MainTaggerModel(object):
                     'id_to_word': self.id_to_word,
                     'id_to_char': self.id_to_char,
                     'id_to_tag': self.id_to_tag,
+                    'id_to_morpho_tag': self.id_to_morpho_tag,
                 }
                 cPickle.dump(mappings, f)
         elif os.path.exists(self.mappings_path):
@@ -99,6 +101,7 @@ class MainTaggerModel(object):
         self.id_to_word = mappings['id_to_word']
         self.id_to_char = mappings['id_to_char']
         self.id_to_tag = mappings['id_to_tag']
+        self.id_to_morpho_tag = mappings['id_to_morpho_tag']
 
     def add_component(self, param):
         """
@@ -166,6 +169,8 @@ class MainTaggerModel(object):
               char_dim,
               char_lstm_dim,
               ch_b,
+              mt_d,
+              mt_t,
               word_dim,
               word_lstm_dim,
               w_b,
@@ -183,6 +188,7 @@ class MainTaggerModel(object):
         n_words = len(self.id_to_word)
         n_chars = len(self.id_to_char)
         n_tags = len(self.id_to_tag)
+        n_morpho_tags = len(self.id_to_morpho_tag)
 
         # Number of capitalization features
         if cap_dim:
@@ -290,6 +296,19 @@ class MainTaggerModel(object):
             word_representation_dim += cap_dim
             self.cap_embeddings = self.model.add_lookup_parameters((n_cap, cap_dim),
                                                                    name="capembeddings")
+
+        if mt_d > 0:
+
+            self.morpho_tag_embeddings = self.model.add_lookup_parameters((n_morpho_tags, mt_d),
+                                                                              name="charembeddings")
+
+            self.old_style_morpho_tag_lstm_layer_for_golden_morpho_analyzes = \
+                create_bilstm_layer("old_style_morpho_tag_lstm_layer_for_golden_morpho_analyzes",
+                                    mt_d,
+                                    2 * mt_d,
+                                    bilstm=True)
+
+            word_representation_dim += 2 * mt_d
 
         # LSTM for words
         self.sentence_level_bilstm_layer = \

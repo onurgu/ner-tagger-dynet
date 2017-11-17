@@ -5,6 +5,8 @@ import logging
 import sys
 import time
 
+from functools import partial
+
 import math
 import os
 
@@ -13,7 +15,7 @@ import numpy as np
 import loader
 from loader import augment_with_pretrained, calculate_global_maxes
 from loader import update_tag_scheme, prepare_dataset
-from loader import word_mapping, char_mapping, tag_mapping
+from loader import word_mapping, char_mapping, tag_mapping, morpho_tag_mapping
 # from model import MainTaggerModel
 from model import MainTaggerModel
 from utils import models_path, evaluate, eval_script, eval_temp
@@ -96,21 +98,31 @@ else:
 dico_chars, char_to_id, id_to_char = char_mapping(train_sentences + dev_sentences + test_sentences)
 dico_tags, tag_to_id, id_to_tag = tag_mapping(train_sentences + dev_sentences + test_sentences)
 
+if parameters['mt_d'] > 0:
+    dico_morpho_tags, morpho_tag_to_id, id_to_morpho_tag = \
+        morpho_tag_mapping(train_sentences + dev_sentences + test_sentences,
+                           morpho_tag_type=parameters['mt_t'],
+                           morpho_tag_column_index=parameters['mt_ci'])
+
+if opts.overwrite_mappings:
+    print 'Saving the mappings to disk...'
+    model.save_mappings(id_to_word, id_to_char, id_to_tag, id_to_morpho_tag)
+
+model.reload_mappings()
+
+
 # Index data
 train_buckets, train_stats, train_unique_words = prepare_dataset(
-    train_sentences, word_to_id, char_to_id, tag_to_id,
-    global_max_sentence_length, global_max_char_length,
-    lower
+    train_sentences, word_to_id, char_to_id, tag_to_id, morpho_tag_to_id,
+    lower, parameters['mt_d'], parameters['mt_t'], parameters['mt_ci'],
 )
 dev_buckets, dev_stats, dev_unique_words = prepare_dataset(
-    dev_sentences, word_to_id, char_to_id, tag_to_id,
-    global_max_sentence_length, global_max_char_length,
-    lower
+    dev_sentences, word_to_id, char_to_id, tag_to_id, morpho_tag_to_id,
+    lower, parameters['mt_d'], parameters['mt_t'], parameters['mt_ci'],
 )
 test_buckets, test_stats, test_unique_words = prepare_dataset(
-    test_sentences, word_to_id, char_to_id, tag_to_id,
-    global_max_sentence_length, global_max_char_length,
-    lower
+    test_sentences, word_to_id, char_to_id, tag_to_id, morpho_tag_to_id,
+    lower, parameters['mt_d'], parameters['mt_t'], parameters['mt_ci'],
 )
 
 print "%i / %i / %i sentences in train / dev / test." % (
@@ -155,7 +167,7 @@ for label, bucket_stats, n_unique_words in [['train', train_stats, train_unique_
 
 # Save the mappings to disk
 print 'Saving the mappings to disk...'
-model.save_mappings(id_to_word, id_to_char, id_to_tag)
+model.save_mappings(id_to_word, id_to_char, id_to_tag, id_to_morpho_tag)
 
 batch_size = opts.batch_size
 
@@ -198,27 +210,49 @@ for epoch in xrange(n_epochs):
 
     permuted_bucket_ids = np.random.permutation(range(len(train_buckets)))
 
-    for bucket_id in list(permuted_bucket_ids):
-
-        bucket_data = train_buckets[bucket_id]
-
+    def get_loss_for_bucket_data(bucket_id, bucket_data, count,
+                                 loss_function=partial(model.get_loss, gungor_data=True),
+                                 label="G"):
         n_batches = int(math.ceil(float(len(bucket_data)) / batch_size))
 
         print "bucket_id: %d, n_batches: %d" % (bucket_id, n_batches)
+
+        losses_of_this_bucket = []
 
         for batch_idx in range(n_batches):
             count += batch_size
 
             sentences_in_the_batch = bucket_data[(batch_idx*batch_size):((batch_idx+1)*batch_size)]
 
-            loss = model.get_loss(sentences_in_the_batch)
-            epoch_costs.append(loss.value()/batch_size)
+            loss = loss_function(sentences_in_the_batch)
             loss.backward()
             model.trainer.update()
+            if loss.value()/batch_size >= (10000000000.0 - 1):
+                logging.error("BEEP")
+            losses_of_this_bucket.append(loss.value()/batch_size)
+            # epoch_costs.append(loss.value()/batch_size)
             if count % 50 == 0 and count != 0:
-                sys.stdout.write("%f " % np.mean(epoch_costs[-50:]))
+                sys.stdout.write("%s%f " % (label, np.mean(losses_of_this_bucket[-50:])))
                 sys.stdout.flush()
+                if np.mean(losses_of_this_bucket[-50:]) > 100:
+                    logging.error("BEEP")
+
+        return losses_of_this_bucket
+
+    count = 0
+    yuret_count = 0
+
+    for bucket_id in list(permuted_bucket_ids):
+
+        # train on gungor_data
+        bucket_data = train_buckets[bucket_id]
+
+
+        epoch_costs += get_loss_for_bucket_data(bucket_id, bucket_data, count)
+        print ""
+
         model.trainer.status()
+
     print ""
     f_scores = eval_with_specific_model(model, epoch, dev_buckets, test_buckets,
                                         id_to_tag, batch_size,
