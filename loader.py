@@ -345,6 +345,7 @@ def prepare_dataset(sentences, word_to_id, char_to_id, tag_to_id,
                 if len(morph_analyzes_from_FST_unprocessed[w_idx]) == 1:
                     golden_analysis_idx = 0
                 else:
+                    # WE expect that this never happens in gungor.ner.14.* files as they have been processed for unfound golden analyses
                     import random
                     golden_analysis_idx = random.randint(0, len(morph_analyzes_from_FST_unprocessed[w_idx])-1)
             if golden_analysis_idx >= len(morph_analyzes_from_FST_unprocessed[w_idx]) or \

@@ -73,7 +73,7 @@ def eval_for_a_checkpoint(saver, model, model_checkpoint_path, dev_buckets, test
     return eval_with_specific_model(model.model, epoch, dev_buckets, test_buckets, integration_mode, *args)
 
 
-def eval_with_specific_model(model, epoch, buckets_list, integration_mode,
+def eval_with_specific_model(model, epoch, buckets_list, integration_mode, active_models,
                              *args): # FLAGS.eval_dir
     # type: (MainTaggerModel, int, list, object, object) -> object
     id_to_tag, batch_size, eval_dir, tag_scheme = args
@@ -83,7 +83,7 @@ def eval_with_specific_model(model, epoch, buckets_list, integration_mode,
 
     total_correct_disambs = {dataset_label: 0 for dataset_label in dataset_labels}
     total_disamb_targets = {dataset_label: 0 for dataset_label in dataset_labels}
-    if integration_mode > 0:
+    if integration_mode > 0 or active_models in [1]:
         detailed_correct_disambs = {dataset_label: dd(int) for dataset_label in dataset_labels}
         detailed_total_target_disambs = {dataset_label: dd(int) for dataset_label in dataset_labels}
 
@@ -120,15 +120,29 @@ def eval_with_specific_model(model, epoch, buckets_list, integration_mode,
 
                     sentence_length = len(sentence['word_ids'])
 
-                    if integration_mode > 0:
+                    if integration_mode > 0 and active_models == 2:
                         selected_morph_analyzes, decoded_tags = model.predict(sentence)
-                    elif integration_mode == 0:
+                    elif active_models == 1:
+                        selected_morph_analyzes, _ = model.predict(sentence)
+                    elif integration_mode == 0 and active_models == 0:
                         decoded_tags = model.predict(sentence)
 
-                    p_tags = [id_to_tag[p_tag] for p_tag in decoded_tags]
-                    r_tags = [id_to_tag[p_tag] for p_tag in sentence['tag_ids']]
+                    if active_models != 1:
+                        p_tags = [id_to_tag[p_tag] for p_tag in decoded_tags]
+                        r_tags = [id_to_tag[p_tag] for p_tag in sentence['tag_ids']]
+                        if tag_scheme == 'iobes':
+                            p_tags = iobes_iob(p_tags)
+                            r_tags = iobes_iob(r_tags)
 
-                    if integration_mode > 0:
+                        for i, (word_id, y_pred, y_real) in enumerate(
+                                zip(sentence['word_ids'], decoded_tags,
+                                    sentence['tag_ids'])):
+                            new_line = " ".join([sentence['str_words'][i]] + [r_tags[i], p_tags[i]])
+                            predictions.append(new_line)
+                            count[y_real, y_pred] += 1
+                        predictions.append("")
+
+                    if integration_mode > 0 or active_models == 1:
                         n_correct_morph_disambs = \
                             sum([x == y for x, y, z in zip(selected_morph_analyzes,
                                                         sentence['golden_morph_analysis_indices'],
@@ -143,48 +157,43 @@ def eval_with_specific_model(model, epoch, buckets_list, integration_mode,
                             detailed_total_target_disambs[dataset_label][key] += 1
                         # total_possible_analyzes += sum([len(el) for el in sentence['morpho_analyzes_tags'] if len(el) > 1])
 
-                    if tag_scheme == 'iobes':
-                        p_tags = iobes_iob(p_tags)
-                        r_tags = iobes_iob(r_tags)
-                    for i, (word_id, y_pred, y_real) in enumerate(
-                            zip(sentence['word_ids'], decoded_tags,
-                                sentence['tag_ids'])):
-                        new_line = " ".join([sentence['str_words'][i]] + [r_tags[i], p_tags[i]])
-                        predictions.append(new_line)
-                        count[y_real, y_pred] += 1
-                    predictions.append("")
             print ""
 
-        # Write predictions to disk and run CoNLL script externally
-        eval_id = np.random.randint(1000000, 2000000)
-        output_path = os.path.join(eval_dir,
-                                   "%s.eval.%i.epoch-%04d.output" % (dataset_label, eval_id, epoch))
-        scores_path = os.path.join(eval_dir,
-                                   "%s.eval.%i.epoch-%04d.scores" % (dataset_label, eval_id, epoch))
-        with codecs.open(output_path, 'w', 'utf8') as f:
-            f.write("\n".join(predictions))
+        if active_models != 1:
+            # Write predictions to disk and run CoNLL script externally
+            eval_id = np.random.randint(1000000, 2000000)
+            output_path = os.path.join(eval_dir,
+                                       "%s.eval.%i.epoch-%04d.output" % (
+                                           dataset_label, eval_id, epoch))
+            scores_path = os.path.join(eval_dir,
+                                       "%s.eval.%i.epoch-%04d.scores" % (
+                                           dataset_label, eval_id, epoch))
+            with codecs.open(output_path, 'w', 'utf8') as f:
+                f.write("\n".join(predictions))
 
-        print "Evaluating the %s dataset with conlleval script" % dataset_label
-        command_string = "%s < %s > %s" % (eval_script, output_path, scores_path)
-        print command_string
-        # os.system(command_string)
-        # sys.exit(0)
-        with codecs.open(output_path, "r", encoding="utf-8") as output_path_f:
-            eval_lines = [x.rstrip() for x in subprocess.check_output([eval_script], stdin=output_path_f).split("\n")]
+            print "Evaluating the %s dataset with conlleval script" % dataset_label
+            command_string = "%s < %s > %s" % (eval_script, output_path, scores_path)
+            print command_string
+            # os.system(command_string)
+            # sys.exit(0)
+            with codecs.open(output_path, "r", encoding="utf-8") as output_path_f:
+                eval_lines = [x.rstrip() for x in subprocess.check_output([eval_script],
+                                                                          stdin=output_path_f).split(
+                    "\n")]
 
-            # CoNLL evaluation results
-            # eval_lines = [l.rstrip() for l in codecs.open(scores_path, 'r', 'utf8')]
-            for line in eval_lines:
-                print line
-            f_scores[dataset_label] = float(eval_lines[1].split(" ")[-1])
+                # CoNLL evaluation results
+                # eval_lines = [l.rstrip() for l in codecs.open(scores_path, 'r', 'utf8')]
+                for line in eval_lines:
+                    print line
+                f_scores[dataset_label] = float(eval_lines[1].split(" ")[-1])
 
-        if integration_mode > 0:
+        if integration_mode > 0 or active_models == 1:
             for n_possible_analyzes in map(int, detailed_correct_disambs[dataset_label].keys()):
                 print "%s %d %d/%d" % (dataset_label,
                                        n_possible_analyzes,
                                        detailed_correct_disambs[dataset_label][n_possible_analyzes],
                                        detailed_total_target_disambs[dataset_label][n_possible_analyzes])
-    if integration_mode == 0:
+    if active_models == 0:
         return f_scores, {}
     else:
         return f_scores, {dataset_label: total_correct_disambs[dataset_label]/float(total_disamb_targets[dataset_label]) for dataset_label in dataset_labels}

@@ -37,6 +37,7 @@ def my_config():
     morpho_tag_column_index = 1
 
     integration_mode = 0
+    active_models = 0
 
     word_dim = 128
     word_lstm_dim = 256
@@ -103,6 +104,7 @@ def run_a_single_configuration_without_fabric(
                                               use_golden_morpho_analysis_in_word_representation,
                                               embeddings_filepath,
                                               integration_mode,
+                                              active_models,
                                               reload,
                                               dynet_gpu,
                                               _run):
@@ -161,6 +163,7 @@ irect 1 --overwrite-mappings 1 --batch-size 1 --morpho_tag_dim 100 --integration
               "--word_lstm_dim %d "\
               "--cap_dim %d "\
               "--integration_mode %d " \
+              "--active_models %d " \
               "--reload %d" % (crf,
                                lr_method,
                                dropout,
@@ -172,6 +175,7 @@ irect 1 --overwrite-mappings 1 --batch-size 1 --morpho_tag_dim 100 --integration
                                word_lstm_dim,
                                cap_dim,
                                integration_mode,
+                               active_models,
                                reload)
 
     # tagger_root = "/media/storage/genie/turkish-ner/code/tagger"

@@ -416,6 +416,10 @@ def read_args(evaluation=False, args_as_a_list=sys.argv[1:]):
         type='int', help="integration mode"
     )
     optparser.add_option(
+        "--active_models", default="0",
+        type='int', help="active models: 0: NER, 1: MD, 2: JOINT"
+    )
+    optparser.add_option(
         "--tying_method", default="",
         help="tying method"
     )
@@ -507,6 +511,7 @@ def form_parameters_dict(opts):
     parameters['mt_t'] = opts.morpho_tag_type
     parameters['mt_ci'] = opts.morpho_tag_column_index
     parameters['integration_mode'] = opts.integration_mode
+    parameters['active_models'] = opts.active_models
     parameters['tying_method'] = opts.tying_method
     parameters['train_with_yuret'] = opts.train_with_yuret
     parameters['use_golden_morpho_analysis_in_word_representation'] = opts.use_golden_morpho_analysis_in_word_representation

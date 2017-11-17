@@ -216,7 +216,7 @@ freq_eval = int(len(train_stats)/5)  # evaluate on dev every freq_eval steps
 best_dev = -np.inf
 best_test = -np.inf
 
-if model.parameters['integration_mode'] > 0:
+if model.parameters['integration_mode'] > 0 or model.parameters['active_models'] == 1:
     best_morph_dev = -np.inf
     best_morph_test = -np.inf
 
@@ -287,26 +287,28 @@ for epoch in xrange(n_epochs):
                                                                          ("test", test_buckets),
                                                                          ("yuret", yuret_test_buckets)],
                                         model.parameters['integration_mode'],
+                                        model.parameters['active_models'],
                                         id_to_tag, batch_size,
                                         eval_logs_dir,
                                         tag_scheme
                                         )
-    if best_dev < f_scores["dev"]:
-        print("NER Epoch: %d New best dev score => best_dev, best_test: %lf %lf" % (epoch + 1,
-                                                                                           f_scores["dev"],
-                                                                                           f_scores["test"]))
-        best_dev = f_scores["dev"]
-        best_test = f_scores["test"]
-        model.save(epoch)
-        model.save_best_performances_and_costs(epoch,
-                                               best_performances=[f_scores["dev"], f_scores["test"]],
-                                               epoch_costs=epoch_costs)
-    else:
-        print("NER Epoch: %d Best dev and accompanying test score, best_dev, best_test: %lf %lf" % (epoch + 1,
-                                                                                                   best_dev,
-                                                                                                   best_test))
+    if model.parameters['active_models'] != 1:
+        if best_dev < f_scores["dev"]:
+            print("NER Epoch: %d New best dev score => best_dev, best_test: %lf %lf" % (epoch + 1,
+                                                                                               f_scores["dev"],
+                                                                                               f_scores["test"]))
+            best_dev = f_scores["dev"]
+            best_test = f_scores["test"]
+            model.save(epoch)
+            model.save_best_performances_and_costs(epoch,
+                                                   best_performances=[f_scores["dev"], f_scores["test"]],
+                                                   epoch_costs=epoch_costs)
+        else:
+            print("NER Epoch: %d Best dev and accompanying test score, best_dev, best_test: %lf %lf" % (epoch + 1,
+                                                                                                       best_dev,
+                                                                                                       best_test))
 
-    if model.parameters['integration_mode'] > 0:
+    if model.parameters['integration_mode'] > 0 or model.parameters['active_models'] == 1:
         if best_morph_dev < morph_accuracies["dev"]:
             print("MORPH Epoch: %d New best dev score => best_dev, best_test: %lf %lf" %
                   (epoch, morph_accuracies["dev"], morph_accuracies["test"]))

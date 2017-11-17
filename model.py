@@ -167,7 +167,11 @@ class MainTaggerModel(object):
     def get_last_layer_context_representations(self, sentence, context_representations):
         last_layer_context_representations = context_representations
 
-        if self.parameters['integration_mode'] > 0:
+        if self.parameters['integration_mode'] > 0 or self.parameters['active_models'] == 1:
+
+            if self.parameters['active_models'] == 1 and \
+                   self.parameters['integration_mode'] != 0:
+                assert False, "integration_mode should be set to zero when active_models == 1"
 
             morph_analysis_representations, morph_analysis_scores = \
                 self.get_morph_analysis_representations_and_scores(sentence,
@@ -378,7 +382,7 @@ class MainTaggerModel(object):
 
             word_representation_dim += (2 if ch_b else 1) * char_lstm_dim
 
-        if self.parameters['integration_mode'] > 0:
+        if self.parameters['integration_mode'] in [1, 2] or self.parameters['active_models'] == 1:
 
             self.char_lstm_layer_for_morph_analysis_roots = \
                 create_bilstm_layer("char_for_morph_analysis_root",
@@ -507,12 +511,14 @@ class MainTaggerModel(object):
             self.get_last_layer_context_representations(sentence,
                                                         context_representations)
 
-        tag_scores = self.calculate_tag_scores(last_layer_context_representations)
+        if self.parameters['active_models'] in [0, 2]:
+            tag_scores = self.calculate_tag_scores(last_layer_context_representations)
+            _, decoded_tags = self.crf_module.viterbi_loss(tag_scores,
+                                                              sentence['tag_ids'])
+        else:
+            decoded_tags = []
 
-        _, decoded_tags = self.crf_module.viterbi_loss(tag_scores,
-                                                          sentence['tag_ids'])
-
-        if self.parameters['integration_mode'] > 0:
+        if self.parameters['integration_mode'] in [1, 2] or self.parameters['active_models'] == 1:
             morph_analysis_representations, morph_analysis_scores = \
                 self.get_morph_analysis_representations_and_scores(sentence,
                                                                    context_representations)
@@ -550,7 +556,7 @@ class MainTaggerModel(object):
             last_layer_context_representations, md_loss, _ = \
                 self.get_last_layer_context_representations(sentence,
                                                             context_representations)
-            if gungor_data:
+            if gungor_data and self.parameters['active_models'] in [0, 2]: # 0: NER, 1: MD, 2: JOINT
                 tag_scores = self.calculate_tag_scores(last_layer_context_representations)
 
                 crf_loss = self.crf_module.neg_log_loss(tag_scores, sentence['tag_ids'])
@@ -559,7 +565,7 @@ class MainTaggerModel(object):
                     logging.error("BEEP")
                 loss_array.append(crf_loss)
 
-            if self.parameters['integration_mode'] > 0:
+            if self.parameters['integration_mode'] > 0 or self.parameters['active_models'] in [1, 2]:
                 loss_array.append(md_loss)
 
         return dynet.esum(loss_array)
