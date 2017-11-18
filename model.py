@@ -184,6 +184,7 @@ class MainTaggerModel(object):
         """
         Build the network.
         """
+
         # Training parameters
         n_words = len(self.id_to_word)
         n_chars = len(self.id_to_char)
@@ -276,6 +277,7 @@ class MainTaggerModel(object):
 
             return builder
 
+        self.representation_creation_model_and_input = dict()
         # Chars inputs
         #
         if char_dim:
@@ -286,6 +288,10 @@ class MainTaggerModel(object):
                                                        char_dim,
                                                        (2 if ch_b else 1) * char_lstm_dim,
                                                        bilstm=True if ch_b else False)
+
+            self.representation_creation_model_and_input['char'] = (self.char_embeddings,
+                                                                    self.char_lstm_layer,
+                                                                    'char_for_ids')
 
             word_representation_dim += (2 if ch_b else 1) * char_lstm_dim
 
@@ -302,11 +308,15 @@ class MainTaggerModel(object):
             self.morpho_tag_embeddings = self.model.add_lookup_parameters((n_morpho_tags, mt_d),
                                                                               name="charembeddings")
 
-            self.old_style_morpho_tag_lstm_layer_for_golden_morpho_analyzes = \
-                create_bilstm_layer("old_style_morpho_tag_lstm_layer_for_golden_morpho_analyzes",
+            self.morpho_tag_lstm_layer_for_golden_morpho_analyzes = \
+                create_bilstm_layer("morpho_tag_lstm_layer_for_golden_morpho_analyzes",
                                     mt_d,
                                     2 * mt_d,
                                     bilstm=True)
+
+            self.representation_creation_model_and_input['morpho_tag'] = (self.morpho_tag_embeddings,
+                                                                    self.morpho_tag_lstm_layer_for_golden_morpho_analyzes,
+                                                                    'morpho_tag_ids')
 
             word_representation_dim += 2 * mt_d
 
@@ -347,17 +357,27 @@ class MainTaggerModel(object):
         return self
 
     def get_char_representations(self, sentence):
+        return self.get_representations(sentence, 'char')
+
+    def get_morpho_tag_representations(self, sentence):
+        return self.get_representations(sentence, 'morpho_tag')
+
+    def get_representations(self, sentence, label):
         # initial_state = self.char_lstm_layer.initial_state()
 
-        char_embeddings = [[self.char_embeddings[char_id] for char_id in word]
-                           for sentence_pos, word in enumerate(sentence['char_for_ids'])]
+        embeddings = self.representation_creation_model_and_input[label][0]
+        lstm_layer = self.representation_creation_model_and_input[label][1]
+        input_label = self.representation_creation_model_and_input[label][2]
+
+        char_embeddings = [[embeddings[char_id] for char_id in word]
+                           for sentence_pos, word in enumerate(sentence[input_label])]
 
         char_representations = []
         for sentence_pos, char_embeddings_for_word in enumerate(char_embeddings):
             # print char_embeddings_for_word
             try:
                 char_representations.append(
-                    self.char_lstm_layer.transduce(char_embeddings_for_word)[-1])
+                    lstm_layer.transduce(char_embeddings_for_word)[-1])
             except IndexError as e:
                 print sentence
                 print char_embeddings_for_word
@@ -388,6 +408,7 @@ class MainTaggerModel(object):
                 'char_lengths': [len(char) for char in chars],
                 'cap_ids': caps,
                 'tag_ids': tags,
+                # if mt_d > 0: 'morpho_tag_ids': morpho_tags,
                 'sentence_lengths': len(s),
                 'max_word_length_in_this_sample': max([len(x) for x in chars])
             })
@@ -406,11 +427,16 @@ class MainTaggerModel(object):
         char_representations = self.get_char_representations(sentence)
         cap_embedding_based_representations = \
             [self.cap_embeddings[cap_id] for cap_id in sentence['cap_ids']]
-        morph_tag_based_representations = None
-        combined_word_representations = [dynet.concatenate([x, y, z]) for x, y, z in
-                                         zip(word_embedding_based_representations,
-                                             char_representations,
-                                             cap_embedding_based_representations)]
+        if self.parameters['mt_d'] > 0:
+            morph_tag_based_representations = self.get_morpho_tag_representations(sentence)
+        else:
+            morph_tag_based_representations = None
+        combined_word_representations = [dynet.concatenate(list(zipped_reps)) for zipped_reps in
+                                         zip(*filter(lambda x: x is not None,
+                                                    [word_embedding_based_representations,
+                                                     char_representations,
+                                                     morph_tag_based_representations,
+                                                     cap_embedding_based_representations]))]
         # print combined_word_representations
         # print self.parameters
         combined_word_representations = [dynet.dropout(x, p=self.parameters['dropout'])

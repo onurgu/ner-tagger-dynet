@@ -211,7 +211,7 @@ for epoch in xrange(n_epochs):
     permuted_bucket_ids = np.random.permutation(range(len(train_buckets)))
 
     def get_loss_for_bucket_data(bucket_id, bucket_data, count,
-                                 loss_function=partial(model.get_loss, gungor_data=True),
+                                 loss_function=partial(model.get_loss),
                                  label="G"):
         n_batches = int(math.ceil(float(len(bucket_data)) / batch_size))
 
@@ -244,9 +244,7 @@ for epoch in xrange(n_epochs):
 
     for bucket_id in list(permuted_bucket_ids):
 
-        # train on gungor_data
         bucket_data = train_buckets[bucket_id]
-
 
         epoch_costs += get_loss_for_bucket_data(bucket_id, bucket_data, count)
         print ""
