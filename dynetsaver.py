@@ -15,5 +15,13 @@ class DynetSaver():
         self.parameter_collection.save(os.path.join(model_checkpoint_dir_path,
                                                     "model.ckpt"))
 
-    def restore(self, filepath):
-        self.parameter_collection.populate(filepath)
+    def get_newest_ckpt_directory(self):
+        model_directories = sorted(os.walk(self.checkpoint_dir).next()[1])
+
+        if model_directories:
+            return os.path.join(self.checkpoint_dir, model_directories[-1])
+        else:
+            return None
+
+    def restore(self, ckpt_directory):
+        self.parameter_collection.populate(os.path.join(ckpt_directory, "model.ckpt"))

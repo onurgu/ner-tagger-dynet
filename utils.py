@@ -436,6 +436,10 @@ def read_args(evaluation=False, args_as_a_list=sys.argv[1:]):
         type='int', help="Reload the last saved model"
     )
     optparser.add_option(
+        "--model_path", default="",
+        type='str', help="Model path must be given when a reload is requested"
+    )
+    optparser.add_option(
         "--skip-testing", default="0",
         type='int',
         help="Skip the evaluation on test set (because dev and test sets are the same and thus testing is irrelevant)"

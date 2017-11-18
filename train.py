@@ -54,8 +54,14 @@ if not os.path.exists(models_path):
 # TODO: Move this to a better configurational structure
 eval_logs_dir = os.path.join(eval_temp, "eval_logs")
 
-# Initialize model
-model = MainTaggerModel(parameters=parameters, models_path=models_path, overwrite_mappings=opts.overwrite_mappings)
+if parameters['model_path']:
+    model = MainTaggerModel(parameters=parameters,
+                            models_path=models_path,
+                            model_path=parameters['model_path'],
+                            overwrite_mappings=opts.overwrite_mappings)
+else:
+    # Initialize model
+    model = MainTaggerModel(parameters=parameters, models_path=models_path, overwrite_mappings=opts.overwrite_mappings)
 print "MainTaggerModel location: %s" % model.model_path
 
 # Data parameters
@@ -177,14 +183,14 @@ model.build(**parameters)
 model.saver = DynetSaver(model.model, model.model_path)
 
 # Reload previous model values
-if opts.reload:
+if opts.reload or parameters['model_path']:
     print 'Reloading previous model...'
     # model.reload()
-    ckpt = model.saver.get_checkpoint_state()
-    if ckpt and ckpt.model_checkpoint_path:
+    model_checkpoint_path = model.saver.get_newest_ckpt_directory()
+    if model_checkpoint_path:
         # Restores from checkpoint
-        model.saver.restore(ckpt.model_checkpoint_path)
-        print "Reloaded %s" % ckpt.model_checkpoint_path
+        model.saver.restore(model_checkpoint_path)
+        print "Reloaded %s" % model_checkpoint_path
 
 ### At this point, the training data is encoded in our format.
 
