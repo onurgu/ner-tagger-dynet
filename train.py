@@ -54,10 +54,10 @@ if not os.path.exists(models_path):
 # TODO: Move this to a better configurational structure
 eval_logs_dir = os.path.join(eval_temp, "eval_logs")
 
-if parameters['model_path']:
+if opts.model_path:
     model = MainTaggerModel(parameters=parameters,
                             models_path=models_path,
-                            model_path=parameters['model_path'],
+                            model_path=opts.model_path,
                             overwrite_mappings=opts.overwrite_mappings)
 else:
     # Initialize model
@@ -183,7 +183,7 @@ model.build(**parameters)
 model.saver = DynetSaver(model.model, model.model_path)
 
 # Reload previous model values
-if opts.reload or parameters['model_path']:
+if opts.reload or opts.model_path:
     print 'Reloading previous model...'
     # model.reload()
     model_checkpoint_path = model.saver.get_newest_ckpt_directory()
