@@ -1,0 +1,34 @@
+BİRİ biri+Pron+Quant+A3sg+P3sg+Nom bir+Adj^DB+Noun+Zero+A3sg+P3sg+Nom bir+Adj^DB+Noun+Zero+A3sg+Pnon+Acc bir+Num+Card^DB+Noun+Zero+A3sg+P3sg+Nom bir+Num+Card^DB+Noun+Zero+A3sg+Pnon+Acc biri+Pron+A3sg+P3sg+Nom O
+bitmeden bit+Verb+Pos^DB+Noun+Inf2+A3sg+Pnon+Abl bit+Verb+Pos^DB+Adverb+WithoutHavingDoneSo bit+Verb+Pos^DB+Noun+Inf2+A3sg+Pnon+Abl O
+öteki öte+Noun+A3sg+Pnon+Nom^DB+Adj+Rel öte+Noun+A3sg+Pnon+Nom^DB+Adj+Rel öte+Postp+PCAbl^DB+Noun+Zero+A3sg+Pnon+Nom^DB+Adj+Rel O
+çıkıyor çık+Verb+Pos+Prog1+A3sg çık+Verb+Pos+Prog1+A3sg O
+
+Üretken üretken+Adj üretken+Adj O
+ülke ülke+Noun+A3sg+Pnon+Nom ülke+Noun+A3sg+Pnon+Nom O
+Türkiye Türkiye+Noun+Prop+A3sg+Pnon+Nom Türkiye+Noun+Prop+A3sg+Pnon+Nom türki+Adj^DB+Noun+Zero+A3sg+Pnon+Dat I-LOC
+
+Yapılacağı yap+Verb^DB+Verb+Pass+Pos^DB+Adj+FutPart+P3sg yap+Verb^DB+Verb+Pass+Pos^DB+Adj+FutPart+P3sg yap+Verb^DB+Verb+Pass+Pos^DB+Noun+FutPart+A3sg+P3sg+Nom O
+şüpheli şüphe+Noun+A3sg+Pnon+Nom^DB+Adj+With şüphe+Noun+A3sg+Pnon+Nom^DB+Adj+With O
+de de+Conj de+Conj de+Verb+Pos+Imp+A2sg O
+olsa ol+Verb+Pos+Desr+A3sg ol+Verb+Pos+Desr+A3sg O
+, ,+Punc ,+Punc O
+seçim seçim+Noun+A3sg+Pnon+Nom seçi+Noun+A3sg+P1sg+Nom seçim+Noun+A3sg+Pnon+Nom O
+üzerine üzer+Noun+A3sg+P3sg+Dat üzer+Noun+A3sg+P3sg+Dat üzer+Noun+A3sg+P2sg+Dat üz+Verb+Pos+Aor^DB+Adj+Zero^DB+Noun+Zero+A3sg+P3sg+Dat üz+Verb+Pos+Aor^DB+Adj+Zero^DB+Noun+Zero+A3sg+P2sg+Dat O
+çeşitlemeler çeşitle+Verb+Pos^DB+Noun+Inf2+A3pl+Pnon+Nom çeşitle+Verb+Pos^DB+Noun+Inf2+A3pl+Pnon+Nom O
+günlerimizi gün+Noun+A3pl+P1pl+Acc gün+Noun+A3pl+P1pl+Acc günle+Verb+Pos+Aor^DB+Adj+Zero^DB+Noun+Zero+A3sg+P1pl+Acc O
+dolduruyordu dol+Verb^DB+Verb+Caus+Pos+Prog1+Past+A3sg dol+Verb^DB+Verb+Caus+Pos+Prog1+Past+A3sg O
+
+Sonra sonra+Adverb sonra+Adverb sonra+Noun+A3sg+Pnon+Nom sonra+Postp+PCAbl O
+Vergi vergi+Noun+A3sg+Pnon+Nom vergi+Noun+A3sg+Pnon+Nom Vergi+Noun+Prop+A3sg+Pnon+Nom O
+Yasası yasa+Noun+A3sg+P3sg+Nom yas+Verb+Pos^DB+Adj+FeelLike yas+Verb+Pos^DB+Noun+FeelLike+A3sg+Pnon+Nom yasa+Noun+A3sg+P3sg+Nom yasa+Noun^DB+Adj+Almost O
+tartışmaları tartış+Verb+Pos^DB+Noun+Inf2+A3pl+P3sg+Nom tart+Verb+Recip+Pos^DB+Noun+Inf2+A3pl+P3pl+Nom tart+Verb+Recip+Pos^DB+Noun+Inf2+A3sg+P3pl+Nom tart+Verb+Recip+Pos^DB+Noun+Inf2+A3pl+Pnon+Acc tart+Verb+Recip+Pos^DB+Noun+Inf2+A3pl+P3sg+Nom tartış+Verb+Pos^DB+Noun+Inf2+A3pl+P3pl+Nom tartış+Verb+Pos^DB+Noun+Inf2+A3sg+P3pl+Nom tartış+Verb+Pos^DB+Noun+Inf2+A3pl+Pnon+Acc tartış+Verb+Pos^DB+Noun+Inf2+A3pl+P3sg+Nom O
+çıktı çık+Verb+Pos+Past+A3sg çıktı+Noun+A3sg+Pnon+Nom çık+Verb+Pos+Past+A3sg O
+
+Daha daha+Noun+A3sg+Pnon+Nom daha+Adverb O
+onlardan o+Pron+Demons+A3pl+Pnon+Abl o+Pron+Demons+A3pl+Pnon+Abl o+Pron+Pers+A3pl+Pnon+Abl on+Num+Card^DB+Noun+Zero+A3pl+Pnon+Abl O
+kurtulmadan kurtul+Verb+Pos^DB+Noun+Inf2+A3sg+Pnon+Abl kurtul+Verb+Pos^DB+Adverb+WithoutHavingDoneSo kurtul+Verb+Pos^DB+Noun+Inf2+A3sg+Pnon+Abl O
+işte iş+Noun+A3sg+Pnon+Loc işte+Adverb iş+Noun+A3sg+Pnon+Loc O
+yeniden yeniden+Adverb yeniden+Adverb yeni+Adj^DB+Noun+Zero+A3sg+Pnon+Abl O
+döndük dön+Verb+Pos+Past+A1pl dön+Verb+Pos+Past+A1pl dön+Verb+Pos^DB+Adj+PastPart+Pnon dön+Verb+Pos^DB+Noun+PastPart+A3sg+Pnon+Nom O
+çetelere çete+Noun+A3pl+Pnon+Dat çete+Noun+A3pl+Pnon+Dat O
+
