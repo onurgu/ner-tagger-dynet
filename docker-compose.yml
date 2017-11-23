@@ -1,0 +1,10 @@
+version: "3"
+services:
+
+  ner-tagger-dynet:
+    image: ner-tagger-dynet:0.0.1
+    volumes:
+      - ./docker/dataset:/opt/ner-tagger-dynet/dataset
+      - ./docker/evaluation_temp:/opt/ner-tagger-dynet/evaluation/temp
+      - ./docker/models:/opt/ner-tagger-dynet/models
+    command: bash
