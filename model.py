@@ -260,7 +260,7 @@ class MainTaggerModel(object):
         Build the network.
         """
 
-        def _create_get_representation(obj, es):
+        def _create_get_representation(obj, es, activation_function=lambda x: x):
             representations = []
             # for e in es:
             #     dynet.ensure_freshness(e)
@@ -268,10 +268,14 @@ class MainTaggerModel(object):
                 fs = fb.initial_state().transduce(es)
                 bs = bb.initial_state().transduce(reversed(es))
                 es = [dynet.concatenate([f, b]) for f, b in zip(fs, reversed(bs))]
-                representations.append(dynet.rectify(dynet.concatenate([fs[-1], bs[-1]])))
+                representations.append(activation_function(dynet.concatenate([fs[-1], bs[-1]])))
             return representations
 
-        BiRNNBuilder.get_representation = _create_get_representation
+        from functools import partial
+
+        BiRNNBuilder.get_representation = partial(_create_get_representation, activation_function=dynet.rectify)
+        BiRNNBuilder.get_representation_concat = _create_get_representation
+
 
         # Training parameters
         n_words = len(self.id_to_word)
@@ -484,8 +488,9 @@ class MainTaggerModel(object):
         for sentence_pos, char_embeddings_for_word in enumerate(char_embeddings):
             # print char_embeddings_for_word
             try:
-                char_representations.append(
-                    self.char_lstm_layer.transduce(char_embeddings_for_word)[-1])
+                # char_representations.append(
+                #     self.char_lstm_layer.transduce(char_embeddings_for_word)[-1])
+                char_representations.append(self.char_lstm_layer.get_representation_concat(char_embeddings_for_word)[0])
             except IndexError as e:
                 print sentence
                 print char_embeddings_for_word
@@ -581,7 +586,7 @@ class MainTaggerModel(object):
     def get_morph_analysis_representation_in_old_style(self, sentence):
         # these morpho_tag_ids are either chars or tags depending on the morpho_tag_type
         return [self.old_style_morpho_tag_lstm_layer_for_golden_morpho_analyzes\
-                    .get_representation([self.morpho_tag_embeddings[morpho_tag_id] for morpho_tag_id in morpho_tag_sequence])[0]
+                    .get_representation_concat([self.morpho_tag_embeddings[morpho_tag_id] for morpho_tag_id in morpho_tag_sequence])[0]
                 for morpho_tag_sequence in sentence['morpho_tag_ids']]
 
     def get_context_representations(self, sentence):
