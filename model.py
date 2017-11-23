@@ -200,7 +200,7 @@ class MainTaggerModel(object):
             if self.parameters['active_models'] in [3]:
                 # calculate last_layer_context_representations in a way to handle multi layer architecture
                 # treat context_representations variable as an input from below and apply n-1 Bi-LSTM layers
-                pass
+                pass # TODO: WIP WIP WIP
             if md_loss.value() > 1000:
                 logging.error("BEEP")
         else:
@@ -244,18 +244,15 @@ class MainTaggerModel(object):
         return selected_morph_analysis_representations
 
     def build(self,
-              dropout,
               char_dim,
               char_lstm_dim,
               ch_b,
               mt_d,
-              mt_t,
               word_dim,
               word_lstm_dim,
               w_b,
               lr_method,
               pre_emb,
-              crf,
               cap_dim,
               training=True,
               **kwargs
