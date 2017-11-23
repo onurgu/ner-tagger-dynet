@@ -79,7 +79,10 @@ class MainTaggerModel(object):
         self.id_to_tag = id_to_tag
         self.id_to_morpho_tag = id_to_morpho_tag
 
-        if self.overwrite_mappings:
+        if os.path.exists(self.mappings_path) and not self.overwrite_mappings:
+            print "Aborting. A previous mappings file exists. You should explicitly state to overwrite the mappings file"
+            sys.exit(1)
+        else:
             with open(self.mappings_path, 'wb') as f:
                 mappings = {
                     'id_to_word': self.id_to_word,
@@ -88,9 +91,6 @@ class MainTaggerModel(object):
                     'id_to_morpho_tag': self.id_to_morpho_tag,
                 }
                 cPickle.dump(mappings, f)
-        elif os.path.exists(self.mappings_path):
-            print "Aborting. A previous mappings file exists. You should explicitly state to overwrite the mappings file"
-            sys.exit(1)
 
     def reload_mappings(self):
         """
