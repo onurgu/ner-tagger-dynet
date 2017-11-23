@@ -167,7 +167,7 @@ class MainTaggerModel(object):
     def get_last_layer_context_representations(self, sentence, context_representations):
         last_layer_context_representations = context_representations
 
-        if self.parameters['integration_mode'] > 0 or self.parameters['active_models'] == 1:
+        if self.parameters['active_models'] in [1, 2, 3]:
 
             if self.parameters['active_models'] == 1 and \
                    self.parameters['integration_mode'] != 0:
@@ -197,6 +197,10 @@ class MainTaggerModel(object):
                      for word_pos, (selected_morph_analysis_representation_pos, context) in
                      enumerate(
                          zip(selected_morph_analysis_representations, context_representations))]
+            if self.parameters['active_models'] in [3]:
+                # calculate last_layer_context_representations in a way to handle multi layer architecture
+                # treat context_representations variable as an input from below and apply n-1 Bi-LSTM layers
+                pass
             if md_loss.value() > 1000:
                 logging.error("BEEP")
         else:
@@ -511,14 +515,15 @@ class MainTaggerModel(object):
             self.get_last_layer_context_representations(sentence,
                                                         context_representations)
 
-        if self.parameters['active_models'] in [0, 2]:
+        if self.parameters['active_models'] in [0, 2, 3]:
             tag_scores = self.calculate_tag_scores(last_layer_context_representations)
             _, decoded_tags = self.crf_module.viterbi_loss(tag_scores,
                                                               sentence['tag_ids'])
         else:
             decoded_tags = []
 
-        if self.parameters['integration_mode'] in [1, 2] or self.parameters['active_models'] == 1:
+        # if self.parameters['integration_mode'] in [1, 2] or self.parameters['active_models'] == 1:
+        if self.parameters['active_models'] in [1, 2, 3]:
             morph_analysis_representations, morph_analysis_scores = \
                 self.get_morph_analysis_representations_and_scores(sentence,
                                                                    context_representations)

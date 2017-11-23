@@ -83,7 +83,7 @@ def eval_with_specific_model(model, epoch, buckets_list, integration_mode, activ
 
     total_correct_disambs = {dataset_label: 0 for dataset_label in dataset_labels}
     total_disamb_targets = {dataset_label: 0 for dataset_label in dataset_labels}
-    if integration_mode > 0 or active_models in [1]:
+    if active_models in [1, 2]:
         detailed_correct_disambs = {dataset_label: dd(int) for dataset_label in dataset_labels}
         detailed_total_target_disambs = {dataset_label: dd(int) for dataset_label in dataset_labels}
 
@@ -120,14 +120,14 @@ def eval_with_specific_model(model, epoch, buckets_list, integration_mode, activ
 
                     sentence_length = len(sentence['word_ids'])
 
-                    if integration_mode > 0 and active_models == 2:
+                    if active_models in [2, 3]:
                         selected_morph_analyzes, decoded_tags = model.predict(sentence)
-                    elif active_models == 1:
+                    elif active_models in [1]:
                         selected_morph_analyzes, _ = model.predict(sentence)
-                    elif integration_mode == 0 and active_models == 0:
+                    elif active_models in [0]:
                         decoded_tags = model.predict(sentence)
 
-                    if active_models != 1:
+                    if active_models in [0, 2, 3]: # i.e. not only MD
                         p_tags = [id_to_tag[p_tag] for p_tag in decoded_tags]
                         r_tags = [id_to_tag[p_tag] for p_tag in sentence['tag_ids']]
                         if tag_scheme == 'iobes':
@@ -142,7 +142,7 @@ def eval_with_specific_model(model, epoch, buckets_list, integration_mode, activ
                             count[y_real, y_pred] += 1
                         predictions.append("")
 
-                    if integration_mode > 0 or active_models == 1:
+                    if active_models in [1, 2]:
                         n_correct_morph_disambs = \
                             sum([x == y for x, y, z in zip(selected_morph_analyzes,
                                                         sentence['golden_morph_analysis_indices'],
@@ -159,7 +159,7 @@ def eval_with_specific_model(model, epoch, buckets_list, integration_mode, activ
 
             print ""
 
-        if active_models != 1:
+        if active_models in [0, 2, 3]:
             # Write predictions to disk and run CoNLL script externally
             eval_id = np.random.randint(1000000, 2000000)
             output_path = os.path.join(eval_dir,
@@ -187,13 +187,13 @@ def eval_with_specific_model(model, epoch, buckets_list, integration_mode, activ
                     print line
                 f_scores[dataset_label] = float(eval_lines[1].split(" ")[-1])
 
-        if integration_mode > 0 or active_models == 1:
+        if active_models in [1, 2]:
             for n_possible_analyzes in map(int, detailed_correct_disambs[dataset_label].keys()):
                 print "%s %d %d/%d" % (dataset_label,
                                        n_possible_analyzes,
                                        detailed_correct_disambs[dataset_label][n_possible_analyzes],
                                        detailed_total_target_disambs[dataset_label][n_possible_analyzes])
-    if active_models == 0:
+    if active_models in [0]:
         return f_scores, {}
     else:
         return f_scores, {dataset_label: total_correct_disambs[dataset_label]/float(total_disamb_targets[dataset_label]) for dataset_label in dataset_labels}

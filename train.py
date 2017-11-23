@@ -216,7 +216,7 @@ freq_eval = int(len(train_stats)/5)  # evaluate on dev every freq_eval steps
 best_dev = -np.inf
 best_test = -np.inf
 
-if model.parameters['integration_mode'] > 0 or model.parameters['active_models'] == 1:
+if model.parameters['active_models'] in [1, 2, 3]:
     best_morph_dev = -np.inf
     best_morph_test = -np.inf
 
@@ -292,7 +292,7 @@ for epoch in xrange(n_epochs):
                                         eval_logs_dir,
                                         tag_scheme
                                         )
-    if model.parameters['active_models'] != 1:
+    if model.parameters['active_models'] in [0, 2, 3]:
         if best_dev < f_scores["dev"]:
             print("NER Epoch: %d New best dev score => best_dev, best_test: %lf %lf" % (epoch + 1,
                                                                                                f_scores["dev"],
@@ -308,7 +308,7 @@ for epoch in xrange(n_epochs):
                                                                                                        best_dev,
                                                                                                        best_test))
 
-    if model.parameters['integration_mode'] > 0 or model.parameters['active_models'] == 1:
+    if model.parameters['active_models'] in [1, 2, 3]:
         if best_morph_dev < morph_accuracies["dev"]:
             print("MORPH Epoch: %d New best dev score => best_dev, best_test: %lf %lf" %
                   (epoch, morph_accuracies["dev"], morph_accuracies["test"]))
