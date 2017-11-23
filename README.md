@@ -2,7 +2,8 @@
 # Neural NER Tagger in Dynet
 
 This is a re-implementation of Lample et al. (2016) (see [1]) in Dynet which borrows several utility functions
-from [their implementation](https://github.com/glample/tagger).
+from [their implementation](https://github.com/glample/tagger). You can find an older
+implementation in Tensorflow in branch [`tensorflow`](https://github.com/onurgu/ner-tagger-tensorflow/tree/tensorflow).
 
 The model is basically a Bi-LSTM based sequence tagger which can utilize several sources of information about
 each word unit like word embeddings, character based embeddings and capitalization features to obtain
