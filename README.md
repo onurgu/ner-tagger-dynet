@@ -49,6 +49,26 @@ The script will tag both the development and testing files and produce files in 
 If you need this and want to contribute by coding and sharing it with the project,
 you are welcome.
 
+## Replication of the experiments
+
+To reproduce the experiments reported with our model, you can use `Docker`
+and build a replica of our experimentation environment.
+
+I will give more details eventually.
+
+To build:
+
+```bash
+docker build -t yourimagename:yourversion .
+```
+
+To run:
+```bash
+docker run -ti -v `pwd`/docker/dataset:/opt/ner-tagger-dynet/dataset -v `pwd`/docker/models:/opt/ner-tagger-dynet/models ner-tagger-dynet:0.0.11 python train.py --train dataset/gungor.ner.train.small --dev dataset/gungor.ner.dev.small --test dataset/gungor.ner.test.small --word_dim 300 --word_lstm_dim 200 --word_bidirect 1 --cap_dim 100 --crf 1 --lr_method=adam --maximum-epochs 50 --char_dim 200 --char_lstm_dim 200 --char_bidirect 1 --overwrite-mappings 1 --batch-size 1
+```
+
+You should create or set permissions accordingly for ``` `pwd`/docker/dataset ``` and ``` `pwd`/docker/models ```.
+
 ## References
 
 [1] Lample, G., Ballesteros, M., Subramanian, S., Kawakami, K., & Dyer, C. (2016). Neural Architectures for Named Entity Recognition. In Proceedings of NAACL-HLT (pp. 260-270).
