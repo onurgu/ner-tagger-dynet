@@ -1,0 +1,8 @@
+dataset
+docs
+evaluation/temp
+models
+Xoutput*
+*.pyc
+*.bak
+l_mkl_2018.1.163.tgz
