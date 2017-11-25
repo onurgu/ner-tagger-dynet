@@ -109,6 +109,9 @@ if parameters['mt_d'] > 0:
         morpho_tag_mapping(train_sentences + dev_sentences + test_sentences,
                            morpho_tag_type=parameters['mt_t'],
                            morpho_tag_column_index=parameters['mt_ci'])
+else:
+    id_to_morpho_tag = {}
+    morpho_tag_to_id = {}
 
 if opts.overwrite_mappings:
     print 'Saving the mappings to disk...'
