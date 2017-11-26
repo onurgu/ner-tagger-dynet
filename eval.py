@@ -89,6 +89,10 @@ def eval_with_specific_model(model, epoch, buckets_list, integration_mode, activ
 
     for dataset_label, dataset_buckets in buckets_list:
 
+        if len(dataset_buckets) == 0:
+            print "Skipping to evaluate %s dataset as it is empty" % dataset_label
+            continue
+
         print "Starting to evaluate %s dataset" % dataset_label
         predictions = []
         n_tags = len(id_to_tag)

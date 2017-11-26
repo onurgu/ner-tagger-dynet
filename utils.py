@@ -363,6 +363,10 @@ def read_args(evaluation=False, args_as_a_list=sys.argv[1:]):
         help="train with yuret training set"
     )
     optparser.add_option(
+        "--test_with_yuret", default=False, action="store_true",
+        help="test with yuret training set"
+    )
+    optparser.add_option(
         "--use_golden_morpho_analysis_in_word_representation", default=False, action="store_true",
         help="use golden morpho analysis when representing words"
     )
@@ -420,6 +424,14 @@ def read_args(evaluation=False, args_as_a_list=sys.argv[1:]):
         type='int', help="active models: 0: NER, 1: MD, 2: JOINT"
     )
     optparser.add_option(
+        "--multilayer", default="0",
+        type='int', help="use a multilayered sentence level Bi-LSTM"
+    )
+    optparser.add_option(
+        "--shortcut_connections", default="0",
+        type='int', help="use shortcut connections in the multilayered scheme"
+    )
+    optparser.add_option(
         "--tying_method", default="",
         help="tying method"
     )
@@ -462,6 +474,10 @@ def read_args(evaluation=False, args_as_a_list=sys.argv[1:]):
     optparser.add_option(
         "-r", "--reload", default="0",
         type='int', help="Reload the last saved model"
+    )
+    optparser.add_option(
+        "--model_path", default="",
+        type='str', help="Model path must be given when a reload is requested"
     )
     optparser.add_option(
         "--skip-testing", default="0",
@@ -512,8 +528,13 @@ def form_parameters_dict(opts):
     parameters['mt_ci'] = opts.morpho_tag_column_index
     parameters['integration_mode'] = opts.integration_mode
     parameters['active_models'] = opts.active_models
+
+    parameters['multilayer'] = opts.multilayer
+    parameters['shortcut_connections'] = opts.shortcut_connections
+
     parameters['tying_method'] = opts.tying_method
     parameters['train_with_yuret'] = opts.train_with_yuret
+    parameters['test_with_yuret'] = opts.test_with_yuret
     parameters['use_golden_morpho_analysis_in_word_representation'] = opts.use_golden_morpho_analysis_in_word_representation
 
     parameters['word_dim'] = opts.word_dim
