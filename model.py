@@ -216,12 +216,17 @@ class MainTaggerModel(object):
 
     def get_morph_analysis_scores(self, morph_analysis_representations, context_representations):
 
-        def sum_and_tanh(context):
-            return dynet.tanh(dynet.sum_cols(dynet.reshape(context, (int(self.parameters['word_lstm_dim']/2), 2))))
+        # (10) and (11) in Shen et al. "The Role of Context ..."
+        def transform_context(context):
+            return dynet.tanh(dynet.affine_transform([self.transform_context_layer_b.expr(),
+                                                      self.transform_context_layer_W.expr(),
+                                                      context]))
+            #return dynet.tanh(dynet.sum_cols(dynet.reshape(context, (int(self.sentence_level_bilstm_contexts_length/2), 2))))
 
         morph_analysis_scores = \
             [dynet.softmax(
-                dynet.concatenate([dynet.dot_product(morph_analysis_representation, sum_and_tanh(context)) # sum + tanh for context[:half] and contet[half:]
+                dynet.concatenate([dynet.dot_product(morph_analysis_representation,
+                                                     transform_context(context)) # sum + tanh for context[:half] and contet[half:]
                                    for morph_analysis_representation in
                                    morph_analysis_representations[word_pos]]))
                 for word_pos, context in enumerate(context_representations)]
@@ -262,21 +267,27 @@ class MainTaggerModel(object):
         Build the network.
         """
 
-        def _create_get_representation(obj, es, activation_function=lambda x: x):
-            representations = []
-            # for e in es:
-            #     dynet.ensure_freshness(e)
-            for (fb, bb) in obj.builder_layers:
-                fs = fb.initial_state().transduce(es)
-                bs = bb.initial_state().transduce(reversed(es))
-                es = [dynet.concatenate([f, b]) for f, b in zip(fs, reversed(bs))]
-                representations.append(activation_function(dynet.concatenate([fs[-1], bs[-1]])))
-            return representations
+        def _create_get_representation(activation_function=lambda x: x):
+            """
+            Helper function to create a function which assembles a representation given an
+            activation_function
+            :param activation_function: 
+            :return: 
+            """
+            def f(obj, es):
+                representations = []
+                # for e in es:
+                #     dynet.ensure_freshness(e)
+                for (fb, bb) in obj.builder_layers:
+                    fs = fb.initial_state().transduce(es)
+                    bs = bb.initial_state().transduce(reversed(es))
+                    es = [dynet.concatenate([f, b]) for f, b in zip(fs, reversed(bs))]
+                    representations.append(activation_function(dynet.concatenate([fs[-1], bs[-1]])))
+                return representations
+            return f
 
-        from functools import partial
-
-        BiRNNBuilder.get_representation = partial(_create_get_representation, activation_function=dynet.rectify)
-        BiRNNBuilder.get_representation_concat = _create_get_representation
+        BiRNNBuilder.get_representation = _create_get_representation(activation_function=dynet.rectify)
+        BiRNNBuilder.get_representation_concat = _create_get_representation()
 
 
         # Training parameters
@@ -357,15 +368,6 @@ class MainTaggerModel(object):
                                                                         new_weights),
                                                                     name="wordembeddings")
 
-            self.tanh_layer_W = self.model.add_parameters((word_lstm_dim, 2 * word_lstm_dim))
-            self.tanh_layer_b = self.model.add_parameters((word_lstm_dim))
-
-            if self.parameters['integration_mode'] in [0, 1]:
-                self.last_layer_W = self.model.add_parameters((n_tags, word_lstm_dim))
-            elif self.parameters['integration_mode'] == 2:
-                self.last_layer_W = self.model.add_parameters((n_tags, word_lstm_dim + 2 * mt_d))
-
-            self.last_layer_b = self.model.add_parameters((n_tags))
 
         def create_bilstm_layer(label, input_dim, lstm_dim, bilstm=True):
             if bilstm:
@@ -388,7 +390,10 @@ class MainTaggerModel(object):
 
             word_representation_dim += (2 if ch_b else 1) * char_lstm_dim
 
-        if self.parameters['integration_mode'] in [1, 2] or self.parameters['active_models'] == 1:
+        # if self.parameters['integration_mode'] in [1, 2] or self.parameters['active_models'] in [1,
+        #                                                                                          2,
+        #                                                                                          3]:
+        if self.parameters['active_models'] in [1, 2, 3]:
 
             self.char_lstm_layer_for_morph_analysis_roots = \
                 create_bilstm_layer("char_for_morph_analysis_root",
@@ -406,8 +411,10 @@ class MainTaggerModel(object):
 
         if self.parameters['use_golden_morpho_analysis_in_word_representation']:
 
-            if self.parameters['integration_mode'] == 0:
-                self.morpho_tag_embeddings = self.model.add_lookup_parameters((n_morpho_tags, mt_d),
+            assert self.parameters['integration_mode'] == 0 and \
+                   self.parameters['active_models'] == 0, "This feature is meaningful if we solely aim NER task."
+
+            self.morpho_tag_embeddings = self.model.add_lookup_parameters((n_morpho_tags, mt_d),
                                                                               name="charembeddings")
 
             self.old_style_morpho_tag_lstm_layer_for_golden_morpho_analyzes = \
@@ -425,6 +432,29 @@ class MainTaggerModel(object):
             word_representation_dim += cap_dim
             self.cap_embeddings = self.model.add_lookup_parameters((n_cap, cap_dim),
                                                                    name="capembeddings")
+
+        if self.parameters['multilayer'] and self.parameters['shortcut_connections']:
+            shortcut_connection_addition = word_representation_dim
+            self.sentence_level_bilstm_contexts_length = shortcut_connection_addition + 2 * word_lstm_dim
+        else:
+            self.sentence_level_bilstm_contexts_length = 2 * word_lstm_dim
+        # else:
+        #     self.sentence_level_bilstm_contexts_length = word_lstm_dim # TODO: Q: as the output of self.tanh_layer_W will be used. right?
+
+        self.tanh_layer_W = self.model.add_parameters((word_lstm_dim, self.sentence_level_bilstm_contexts_length))
+        self.tanh_layer_b = self.model.add_parameters((word_lstm_dim))
+
+        if self.parameters['integration_mode'] in [0, 1]:
+            self.last_layer_W = self.model.add_parameters((n_tags, word_lstm_dim))
+        elif self.parameters['integration_mode'] == 2:
+            self.last_layer_W = self.model.add_parameters((n_tags, word_lstm_dim + 2 * mt_d))
+
+        self.last_layer_b = self.model.add_parameters((n_tags))
+
+        self.transform_context_layer_b = \
+            self.model.add_parameters((2 * mt_d))
+        self.transform_context_layer_W = \
+            self.model.add_parameters((2 * mt_d, self.sentence_level_bilstm_contexts_length))
 
         # LSTM for words
         # self.sentence_level_bilstm_layer = \

@@ -83,7 +83,7 @@ def eval_with_specific_model(model, epoch, buckets_list, integration_mode, activ
 
     total_correct_disambs = {dataset_label: 0 for dataset_label in dataset_labels}
     total_disamb_targets = {dataset_label: 0 for dataset_label in dataset_labels}
-    if active_models in [1, 2]:
+    if active_models in [1, 2, 3]:
         detailed_correct_disambs = {dataset_label: dd(int) for dataset_label in dataset_labels}
         detailed_total_target_disambs = {dataset_label: dd(int) for dataset_label in dataset_labels}
 
@@ -91,6 +91,8 @@ def eval_with_specific_model(model, epoch, buckets_list, integration_mode, activ
 
         if len(dataset_buckets) == 0:
             print "Skipping to evaluate %s dataset as it is empty" % dataset_label
+            total_correct_disambs[dataset_label] = -1
+            total_disamb_targets[dataset_label] = 1
             continue
 
         print "Starting to evaluate %s dataset" % dataset_label
@@ -146,7 +148,7 @@ def eval_with_specific_model(model, epoch, buckets_list, integration_mode, activ
                             count[y_real, y_pred] += 1
                         predictions.append("")
 
-                    if active_models in [1, 2]:
+                    if active_models in [1, 2, 3]:
                         n_correct_morph_disambs = \
                             sum([x == y for x, y, z in zip(selected_morph_analyzes,
                                                         sentence['golden_morph_analysis_indices'],
@@ -191,7 +193,7 @@ def eval_with_specific_model(model, epoch, buckets_list, integration_mode, activ
                     print line
                 f_scores[dataset_label] = float(eval_lines[1].split(" ")[-1])
 
-        if active_models in [1, 2]:
+        if active_models in [1, 2, 3]:
             for n_possible_analyzes in map(int, detailed_correct_disambs[dataset_label].keys()):
                 print "%s %d %d/%d" % (dataset_label,
                                        n_possible_analyzes,
@@ -200,7 +202,15 @@ def eval_with_specific_model(model, epoch, buckets_list, integration_mode, activ
     if active_models in [0]:
         return f_scores, {}
     else:
-        return f_scores, {dataset_label: total_correct_disambs[dataset_label]/float(total_disamb_targets[dataset_label]) for dataset_label in dataset_labels}
+        result = {}
+        for dataset_label in dataset_labels:
+            if total_disamb_targets[dataset_label] == 0:
+                total_correct_disambs[dataset_label] = -1
+                total_disamb_targets[dataset_label] = 1
+            result[dataset_label] = \
+                total_correct_disambs[dataset_label] / float(total_disamb_targets[dataset_label])
+
+        return f_scores, result
 
 def evaluate(model, dev_buckets, test_buckets, opts, *args):
   """Eval CIFAR-10 for a number of steps.""" # with tf.Graph().as_default() as g:

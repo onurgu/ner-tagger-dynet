@@ -38,9 +38,11 @@ def my_config():
 
     integration_mode = 0
     active_models = 0
+    multilayer = 0
+    shortcut_connections = 0
 
-    word_dim = 128
-    word_lstm_dim = 256
+    word_dim = 64
+    word_lstm_dim = 64
     cap_dim = 0
 
     # char_dim = 200
@@ -105,6 +107,8 @@ def run_a_single_configuration_without_fabric(
                                               embeddings_filepath,
                                               integration_mode,
                                               active_models,
+                                              multilayer,
+                                              shortcut_connections,
                                               reload,
                                               dynet_gpu,
                                               _run):
@@ -164,6 +168,8 @@ irect 1 --overwrite-mappings 1 --batch-size 1 --morpho_tag_dim 100 --integration
               "--cap_dim %d "\
               "--integration_mode %d " \
               "--active_models %d " \
+              "--multilayer %d " \
+              "--shortcut_connections %d " \
               "--reload %d" % (crf,
                                lr_method,
                                dropout,
@@ -176,6 +182,8 @@ irect 1 --overwrite-mappings 1 --batch-size 1 --morpho_tag_dim 100 --integration
                                cap_dim,
                                integration_mode,
                                active_models,
+                               multilayer,
+                               shortcut_connections,
                                reload)
 
     # tagger_root = "/media/storage/genie/turkish-ner/code/tagger"
