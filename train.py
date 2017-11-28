@@ -152,11 +152,11 @@ if parameters['test_with_yuret'] or parameters['train_with_yuret']:
     # yuret train and test datasets
     yuret_train_buckets, yuret_train_stats, yuret_train_unique_words = prepare_dataset(
         yuret_train_sentences, word_to_id, char_to_id, tag_to_id, morpho_tag_to_id,
-        lower, parameters['mt_t'], parameters['mt_ci'],
+        lower, parameters['mt_d'], parameters['mt_t'], parameters['mt_ci'],
     )
     yuret_test_buckets, yuret_test_stats, yuret_test_unique_words = prepare_dataset(
         yuret_test_sentences, word_to_id, char_to_id, tag_to_id, morpho_tag_to_id,
-        lower, parameters['mt_t'], parameters['mt_ci'],
+        lower, parameters['mt_d'], parameters['mt_t'], parameters['mt_ci'],
     )
 else:
     yuret_train_buckets = []
