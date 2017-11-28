@@ -1,13 +1,8 @@
 
-# Neural NER Tagger in Dynet
+# Neural Joint Learning for MD and NER Tasks
 
-This is a re-implementation of Lample et al. (2016) (see [1]) in Dynet which borrows several utility functions
-from [their implementation](https://github.com/glample/tagger).
-
-The model is basically a Bi-LSTM based sequence tagger which can utilize several sources of information about
-each word unit like word embeddings, character based embeddings and capitalization features to obtain
-the representation for that specific word unit. The model does not rely on any external data other
-than having the option to initialize with pretrained word embeddings.
+For now, a short description: This is a work-in-progress copy of our joint learner for MD and NER.
+We submit our results in this area to major conferences.
 
 The following is an example command to train a model with training, development and testing datasets in
 CoNLL format. Word embeddings should be in the usual text format.
@@ -72,6 +67,7 @@ You should create or set permissions accordingly for ``` `pwd`/docker/dataset ``
 ## References
 
 [1] Lample, G., Ballesteros, M., Subramanian, S., Kawakami, K., & Dyer, C. (2016). Neural Architectures for Named Entity Recognition. In Proceedings of NAACL-HLT (pp. 260-270).
+We borrow several utility functions from [their implementation](https://github.com/glample/tagger).
 
 [2] Morphological Embeddings for Named Entity Recognition in Morphologically Rich Languages
 O Gungor, E Yildiz, S Uskudarli, T Gungor - arXiv preprint arXiv:1706.00506, 2017
