@@ -43,6 +43,9 @@ assert not parameters['all_emb'] or parameters['pre_emb']
 assert not parameters['pre_emb'] or parameters['word_dim'] > 0
 assert not parameters['pre_emb'] or os.path.isfile(parameters['pre_emb'])
 
+if parameters['train_with_yuret']:
+    parameters['test_with_yuret'] = 1
+
 # Check evaluation script / folders
 if not os.path.isfile(eval_script):
     raise Exception('CoNLL evaluation script not found at "%s"' % eval_script)
@@ -54,8 +57,14 @@ if not os.path.exists(models_path):
 # TODO: Move this to a better configurational structure
 eval_logs_dir = os.path.join(eval_temp, "eval_logs")
 
-# Initialize model
-model = MainTaggerModel(parameters=parameters, models_path=models_path, overwrite_mappings=opts.overwrite_mappings)
+if opts.model_path:
+    model = MainTaggerModel(parameters=parameters,
+                            models_path=models_path,
+                            model_path=opts.model_path,
+                            overwrite_mappings=opts.overwrite_mappings)
+else:
+    # Initialize model
+    model = MainTaggerModel(parameters=parameters, models_path=models_path, overwrite_mappings=opts.overwrite_mappings)
 print "MainTaggerModel location: %s" % model.model_path
 
 # Data parameters
@@ -71,13 +80,17 @@ train_sentences, max_sentence_lengths['train'], max_word_lengths['train'] = load
 dev_sentences, max_sentence_lengths['dev'], max_word_lengths['dev'] = loader.load_sentences(opts.dev, lower, zeros)
 test_sentences, max_sentence_lengths['test'], max_word_lengths['test'] = loader.load_sentences(opts.test, lower, zeros)
 
-# train.merge and test.merge
-yuret_train_sentences, max_sentence_lengths['yuret_train'], max_word_lengths['yuret_train'] = \
-    loader.load_sentences(opts.yuret_train, lower, zeros)
-yuret_test_sentences, max_sentence_lengths['yuret_test'], max_word_lengths['yuret_test'] = \
-    loader.load_sentences(opts.yuret_test, lower, zeros)
-update_tag_scheme(yuret_train_sentences, tag_scheme)
-update_tag_scheme(yuret_test_sentences, tag_scheme)
+if parameters['test_with_yuret'] or parameters['train_with_yuret']:
+    # train.merge and test.merge
+    yuret_train_sentences, max_sentence_lengths['yuret_train'], max_word_lengths['yuret_train'] = \
+        loader.load_sentences(opts.yuret_train, lower, zeros)
+    yuret_test_sentences, max_sentence_lengths['yuret_test'], max_word_lengths['yuret_test'] = \
+        loader.load_sentences(opts.yuret_test, lower, zeros)
+    update_tag_scheme(yuret_train_sentences, tag_scheme)
+    update_tag_scheme(yuret_test_sentences, tag_scheme)
+else:
+    yuret_train_sentences = []
+    yuret_test_sentences = []
 
 # Use selected tagging scheme (IOB / IOBES)
 update_tag_scheme(train_sentences, tag_scheme)
@@ -104,11 +117,15 @@ dico_chars, char_to_id, id_to_char = \
     char_mapping(train_sentences + dev_sentences + test_sentences + yuret_train_sentences + yuret_test_sentences)
 dico_tags, tag_to_id, id_to_tag = \
     tag_mapping(train_sentences + dev_sentences + test_sentences + yuret_train_sentences + yuret_test_sentences)
-dico_morpho_tags, morpho_tag_to_id, id_to_morpho_tag = \
-    morpho_tag_mapping(train_sentences + dev_sentences + test_sentences + yuret_train_sentences + yuret_test_sentences,
-                       morpho_tag_type=parameters['mt_t'],
-                       morpho_tag_column_index=parameters['mt_ci'],
-                       joint_learning=True)
+if parameters['mt_d'] > 0:
+    dico_morpho_tags, morpho_tag_to_id, id_to_morpho_tag = \
+        morpho_tag_mapping(train_sentences + dev_sentences + test_sentences + yuret_train_sentences + yuret_test_sentences,
+                           morpho_tag_type=parameters['mt_t'],
+                           morpho_tag_column_index=parameters['mt_ci'],
+                           joint_learning=True)
+else:
+    id_to_morpho_tag = {}
+    morpho_tag_to_id = {}
 
 if opts.overwrite_mappings:
     print 'Saving the mappings to disk...'
@@ -120,26 +137,30 @@ model.reload_mappings()
 # Index data
 train_buckets, train_stats, train_unique_words = prepare_dataset(
     train_sentences, word_to_id, char_to_id, tag_to_id, morpho_tag_to_id,
-    lower, parameters['mt_t'], parameters['mt_ci'],
+    lower, parameters['mt_d'], parameters['mt_t'], parameters['mt_ci'],
 )
 dev_buckets, dev_stats, dev_unique_words = prepare_dataset(
     dev_sentences, word_to_id, char_to_id, tag_to_id, morpho_tag_to_id,
-    lower, parameters['mt_t'], parameters['mt_ci'],
+    lower, parameters['mt_d'], parameters['mt_t'], parameters['mt_ci'],
 )
 test_buckets, test_stats, test_unique_words = prepare_dataset(
     test_sentences, word_to_id, char_to_id, tag_to_id, morpho_tag_to_id,
-    lower, parameters['mt_t'], parameters['mt_ci'],
+    lower, parameters['mt_d'], parameters['mt_t'], parameters['mt_ci'],
 )
 
-# yuret train and test datasets
-yuret_train_buckets, yuret_train_stats, yuret_train_unique_words = prepare_dataset(
-    yuret_train_sentences, word_to_id, char_to_id, tag_to_id, morpho_tag_to_id,
-    lower, parameters['mt_t'], parameters['mt_ci'],
-)
-yuret_test_buckets, yuret_test_stats, yuret_test_unique_words = prepare_dataset(
-    yuret_test_sentences, word_to_id, char_to_id, tag_to_id, morpho_tag_to_id,
-    lower, parameters['mt_t'], parameters['mt_ci'],
-)
+if parameters['test_with_yuret'] or parameters['train_with_yuret']:
+    # yuret train and test datasets
+    yuret_train_buckets, yuret_train_stats, yuret_train_unique_words = prepare_dataset(
+        yuret_train_sentences, word_to_id, char_to_id, tag_to_id, morpho_tag_to_id,
+        lower, parameters['mt_d'], parameters['mt_t'], parameters['mt_ci'],
+    )
+    yuret_test_buckets, yuret_test_stats, yuret_test_unique_words = prepare_dataset(
+        yuret_test_sentences, word_to_id, char_to_id, tag_to_id, morpho_tag_to_id,
+        lower, parameters['mt_d'], parameters['mt_t'], parameters['mt_ci'],
+    )
+else:
+    yuret_train_buckets = []
+    yuret_test_buckets = []
 
 print "%i / %i / %i sentences in train / dev / test." % (
     len(train_stats), len(dev_stats), len(test_stats))
@@ -193,14 +214,14 @@ model.build(**parameters)
 model.saver = DynetSaver(model.model, model.model_path)
 
 # Reload previous model values
-if opts.reload:
+if opts.reload or opts.model_path:
     print 'Reloading previous model...'
     # model.reload()
-    ckpt = model.saver.get_checkpoint_state()
-    if ckpt and ckpt.model_checkpoint_path:
+    model_checkpoint_path = model.saver.get_newest_ckpt_directory()
+    if model_checkpoint_path:
         # Restores from checkpoint
-        model.saver.restore(ckpt.model_checkpoint_path)
-        print "Reloaded %s" % ckpt.model_checkpoint_path
+        model.saver.restore(model_checkpoint_path)
+        print "Reloaded %s" % model_checkpoint_path
 
 ### At this point, the training data is encoded in our format.
 
@@ -216,7 +237,7 @@ freq_eval = int(len(train_stats)/5)  # evaluate on dev every freq_eval steps
 best_dev = -np.inf
 best_test = -np.inf
 
-if model.parameters['integration_mode'] > 0 or model.parameters['active_models'] == 1:
+if model.parameters['active_models'] in [1, 2, 3]:
     best_morph_dev = -np.inf
     best_morph_test = -np.inf
 
@@ -283,16 +304,20 @@ for epoch in xrange(n_epochs):
         model.trainer.status()
 
     print ""
-    f_scores, morph_accuracies = eval_with_specific_model(model, epoch, [("dev", dev_buckets),
-                                                                         ("test", test_buckets),
-                                                                         ("yuret", yuret_test_buckets)],
+
+    buckets_to_be_tested = [("dev", dev_buckets),
+                            ("test", test_buckets)]
+    if model.parameters['test_with_yuret']:
+        buckets_to_be_tested.append(("yuret", yuret_test_buckets))
+
+    f_scores, morph_accuracies = eval_with_specific_model(model, epoch, buckets_to_be_tested,
                                         model.parameters['integration_mode'],
                                         model.parameters['active_models'],
                                         id_to_tag, batch_size,
                                         eval_logs_dir,
                                         tag_scheme
                                         )
-    if model.parameters['active_models'] != 1:
+    if model.parameters['active_models'] in [0, 2, 3]:
         if best_dev < f_scores["dev"]:
             print("NER Epoch: %d New best dev score => best_dev, best_test: %lf %lf" % (epoch + 1,
                                                                                                f_scores["dev"],
@@ -308,21 +333,23 @@ for epoch in xrange(n_epochs):
                                                                                                        best_dev,
                                                                                                        best_test))
 
-    if model.parameters['integration_mode'] > 0 or model.parameters['active_models'] == 1:
+    if model.parameters['active_models'] in [1, 2, 3]:
         if best_morph_dev < morph_accuracies["dev"]:
             print("MORPH Epoch: %d New best dev score => best_dev, best_test: %lf %lf" %
                   (epoch, morph_accuracies["dev"], morph_accuracies["test"]))
             best_morph_dev = morph_accuracies["dev"]
             best_morph_test = morph_accuracies["test"]
-            best_morph_yuret = morph_accuracies["yuret"]
-            print("YURET Epoch: %d New best dev score => best_dev, best_test: %lf %lf" %
-                  (epoch, 0.0, morph_accuracies["yuret"]))
-            # we do not save in this case, just reporting
+            if parameters['test_with_yuret']:
+                best_morph_yuret = morph_accuracies["yuret"]
+                print("YURET Epoch: %d New best dev score => best_dev, best_test: %lf %lf" %
+                      (epoch, 0.0, morph_accuracies["yuret"]))
+                # we do not save in this case, just reporting
         else:
             print("MORPH Epoch: %d Best dev and accompanying test score, best_dev, best_test: %lf %lf"
                   % (epoch, best_morph_dev, best_morph_test))
-            print("YURET Epoch: %d Best dev and accompanying test score, best_dev, best_test: %lf %lf"
-                  % (epoch, 0.0, best_morph_yuret))
+            if parameters['test_with_yuret']:
+                print("YURET Epoch: %d Best dev and accompanying test score, best_dev, best_test: %lf %lf"
+                      % (epoch, 0.0, best_morph_yuret))
 
     print "Epoch %i done. Average cost: %f" % (epoch, np.mean(epoch_costs))
     print "MainTaggerModel dir: %s" % model.model_path

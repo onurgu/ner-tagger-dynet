@@ -164,10 +164,12 @@ class MainTaggerModel(object):
         self.saver.restore(os.path.join(path, "model.ckpt"),
                            epoch=epoch, n_bests=self.n_bests)
 
-    def get_last_layer_context_representations(self, sentence, context_representations):
-        last_layer_context_representations = context_representations
+    def get_last_layer_context_representations(self, sentence,
+                                               context_representations_for_ner_loss,
+                                               context_representations_for_md_loss):
+        last_layer_context_representations = context_representations_for_ner_loss
 
-        if self.parameters['integration_mode'] > 0 or self.parameters['active_models'] == 1:
+        if self.parameters['active_models'] in [1, 2, 3]:
 
             if self.parameters['active_models'] == 1 and \
                    self.parameters['integration_mode'] != 0:
@@ -175,7 +177,7 @@ class MainTaggerModel(object):
 
             morph_analysis_representations, morph_analysis_scores = \
                 self.get_morph_analysis_representations_and_scores(sentence,
-                                                                   context_representations)
+                                                                   context_representations_for_md_loss)
 
             selected_morph_analysis_representations = \
                 self.disambiguate_morph_analyzes(morph_analysis_scores)
@@ -196,7 +198,10 @@ class MainTaggerModel(object):
                                         [selected_morph_analysis_representation_pos]])
                      for word_pos, (selected_morph_analysis_representation_pos, context) in
                      enumerate(
-                         zip(selected_morph_analysis_representations, context_representations))]
+                         zip(selected_morph_analysis_representations, context_representations_for_ner_loss))]
+            if self.parameters['active_models'] in [3]:
+                # TODO: is this necessary now?
+                pass
             if md_loss.value() > 1000:
                 logging.error("BEEP")
         else:
@@ -204,19 +209,24 @@ class MainTaggerModel(object):
             # we must decide whether we should implement the morphological embeddings scheme here.
             md_loss = dynet.scalarInput(0)
             selected_morph_analysis_representations = None
-            last_layer_context_representations = context_representations
+            last_layer_context_representations = context_representations_for_ner_loss
 
         assert last_layer_context_representations is not None
         return last_layer_context_representations, md_loss, selected_morph_analysis_representations
 
     def get_morph_analysis_scores(self, morph_analysis_representations, context_representations):
 
-        def sum_and_tanh(context):
-            return dynet.tanh(dynet.sum_cols(dynet.reshape(context, (int(self.parameters['word_lstm_dim']/2), 2))))
+        # (10) and (11) in Shen et al. "The Role of Context ..."
+        def transform_context(context):
+            return dynet.tanh(dynet.affine_transform([self.transform_context_layer_b.expr(),
+                                                      self.transform_context_layer_W.expr(),
+                                                      context]))
+            #return dynet.tanh(dynet.sum_cols(dynet.reshape(context, (int(self.sentence_level_bilstm_contexts_length/2), 2))))
 
         morph_analysis_scores = \
             [dynet.softmax(
-                dynet.concatenate([dynet.dot_product(morph_analysis_representation, sum_and_tanh(context)) # sum + tanh for context[:half] and contet[half:]
+                dynet.concatenate([dynet.dot_product(morph_analysis_representation,
+                                                     transform_context(context)) # sum + tanh for context[:half] and contet[half:]
                                    for morph_analysis_representation in
                                    morph_analysis_representations[word_pos]]))
                 for word_pos, context in enumerate(context_representations)]
@@ -240,18 +250,15 @@ class MainTaggerModel(object):
         return selected_morph_analysis_representations
 
     def build(self,
-              dropout,
               char_dim,
               char_lstm_dim,
               ch_b,
               mt_d,
-              mt_t,
               word_dim,
               word_lstm_dim,
               w_b,
               lr_method,
               pre_emb,
-              crf,
               cap_dim,
               training=True,
               **kwargs
@@ -260,21 +267,27 @@ class MainTaggerModel(object):
         Build the network.
         """
 
-        def _create_get_representation(obj, es, activation_function=lambda x: x):
-            representations = []
-            # for e in es:
-            #     dynet.ensure_freshness(e)
-            for (fb, bb) in obj.builder_layers:
-                fs = fb.initial_state().transduce(es)
-                bs = bb.initial_state().transduce(reversed(es))
-                es = [dynet.concatenate([f, b]) for f, b in zip(fs, reversed(bs))]
-                representations.append(activation_function(dynet.concatenate([fs[-1], bs[-1]])))
-            return representations
+        def _create_get_representation(activation_function=lambda x: x):
+            """
+            Helper function to create a function which assembles a representation given an
+            activation_function
+            :param activation_function: 
+            :return: 
+            """
+            def f(obj, es):
+                representations = []
+                # for e in es:
+                #     dynet.ensure_freshness(e)
+                for (fb, bb) in obj.builder_layers:
+                    fs = fb.initial_state().transduce(es)
+                    bs = bb.initial_state().transduce(reversed(es))
+                    es = [dynet.concatenate([f, b]) for f, b in zip(fs, reversed(bs))]
+                    representations.append(activation_function(dynet.concatenate([fs[-1], bs[-1]])))
+                return representations
+            return f
 
-        from functools import partial
-
-        BiRNNBuilder.get_representation = partial(_create_get_representation, activation_function=dynet.rectify)
-        BiRNNBuilder.get_representation_concat = _create_get_representation
+        BiRNNBuilder.get_representation = _create_get_representation(activation_function=dynet.rectify)
+        BiRNNBuilder.get_representation_concat = _create_get_representation()
 
 
         # Training parameters
@@ -355,15 +368,6 @@ class MainTaggerModel(object):
                                                                         new_weights),
                                                                     name="wordembeddings")
 
-            self.tanh_layer_W = self.model.add_parameters((word_lstm_dim, 2 * word_lstm_dim))
-            self.tanh_layer_b = self.model.add_parameters((word_lstm_dim))
-
-            if self.parameters['integration_mode'] in [0, 1]:
-                self.last_layer_W = self.model.add_parameters((n_tags, word_lstm_dim))
-            elif self.parameters['integration_mode'] == 2:
-                self.last_layer_W = self.model.add_parameters((n_tags, word_lstm_dim + 2 * mt_d))
-
-            self.last_layer_b = self.model.add_parameters((n_tags))
 
         def create_bilstm_layer(label, input_dim, lstm_dim, bilstm=True):
             if bilstm:
@@ -386,7 +390,10 @@ class MainTaggerModel(object):
 
             word_representation_dim += (2 if ch_b else 1) * char_lstm_dim
 
-        if self.parameters['integration_mode'] in [1, 2] or self.parameters['active_models'] == 1:
+        # if self.parameters['integration_mode'] in [1, 2] or self.parameters['active_models'] in [1,
+        #                                                                                          2,
+        #                                                                                          3]:
+        if self.parameters['active_models'] in [1, 2, 3]:
 
             self.char_lstm_layer_for_morph_analysis_roots = \
                 create_bilstm_layer("char_for_morph_analysis_root",
@@ -404,8 +411,10 @@ class MainTaggerModel(object):
 
         if self.parameters['use_golden_morpho_analysis_in_word_representation']:
 
-            if self.parameters['integration_mode'] == 0:
-                self.morpho_tag_embeddings = self.model.add_lookup_parameters((n_morpho_tags, mt_d),
+            assert self.parameters['integration_mode'] == 0 and \
+                   self.parameters['active_models'] == 0, "This feature is meaningful if we solely aim NER task."
+
+            self.morpho_tag_embeddings = self.model.add_lookup_parameters((n_morpho_tags, mt_d),
                                                                               name="charembeddings")
 
             self.old_style_morpho_tag_lstm_layer_for_golden_morpho_analyzes = \
@@ -424,12 +433,50 @@ class MainTaggerModel(object):
             self.cap_embeddings = self.model.add_lookup_parameters((n_cap, cap_dim),
                                                                    name="capembeddings")
 
+        if self.parameters['multilayer'] and self.parameters['shortcut_connections']:
+            shortcut_connection_addition = word_representation_dim
+            self.sentence_level_bilstm_contexts_length = shortcut_connection_addition + 2 * word_lstm_dim
+        else:
+            self.sentence_level_bilstm_contexts_length = 2 * word_lstm_dim
+        # else:
+        #     self.sentence_level_bilstm_contexts_length = word_lstm_dim # TODO: Q: as the output of self.tanh_layer_W will be used. right?
+
+        self.tanh_layer_W = self.model.add_parameters((word_lstm_dim, self.sentence_level_bilstm_contexts_length))
+        self.tanh_layer_b = self.model.add_parameters((word_lstm_dim))
+
+        if self.parameters['integration_mode'] in [0, 1]:
+            self.last_layer_W = self.model.add_parameters((n_tags, word_lstm_dim))
+        elif self.parameters['integration_mode'] == 2:
+            self.last_layer_W = self.model.add_parameters((n_tags, word_lstm_dim + 2 * mt_d))
+
+        self.last_layer_b = self.model.add_parameters((n_tags))
+
+        self.transform_context_layer_b = \
+            self.model.add_parameters((2 * mt_d))
+        self.transform_context_layer_W = \
+            self.model.add_parameters((2 * mt_d, self.sentence_level_bilstm_contexts_length))
+
         # LSTM for words
+        # self.sentence_level_bilstm_layer = \
+        #     create_bilstm_layer("sentence_level",
+        #                         word_representation_dim,
+        #                         2 * word_lstm_dim,
+        #                         bilstm=True if w_b else False)
+
+        from toolkit.rnn import BiLSTMMultiLayeredWithShortcutConnections
+
+        if self.parameters['multilayer']:
+            self.num_sentence_level_bilstm_layers = 3
+        else:
+            self.num_sentence_level_bilstm_layers = 1
+
         self.sentence_level_bilstm_layer = \
-            create_bilstm_layer("sentence_level",
-                                word_representation_dim,
-                                2 * word_lstm_dim,
-                                bilstm=True if w_b else False)
+            BiLSTMMultiLayeredWithShortcutConnections(self.num_sentence_level_bilstm_layers,
+                                                      word_representation_dim,
+                                                      2 * word_lstm_dim,
+                                                      self.model,
+                                                      CoupledLSTMBuilder,
+                                                      self.parameters['shortcut_connections'])
 
         def _create_tying_method(activation_function=dynet.tanh, classic=True):
 
@@ -497,36 +544,51 @@ class MainTaggerModel(object):
                 print e
         return char_representations
 
-    def get_sentence_level_bilstm_outputs(self, combined_word_representations):
+    def get_sentence_level_bilstm_outputs(self,
+                                          combined_word_representations,
+                                          which_layer_to_use_for_morpho_disamb):
+        """
+        This function produces the context representations at each level given the word representations
+        for each word and returns the last layer's output and the specific layer output which we want
+        to use for morphological disambiguation.
+         :param combined_word_representations: 
+         :param which_layer_to_use_for_morpho_disamb: xyz 
+         :type which_layer_to_use_for_morpho_disamb: int
+         :return: two outputs: 1) layer output to be used for NER loss, 2) layer output to be used for MD loss
+        """
 
-        context_representations = \
+        last_layer_context_representations, multilayered_context_representations = \
             self.sentence_level_bilstm_layer.transduce(combined_word_representations)
 
-        context_representations = [dynet.tanh(dynet.affine_transform([self.tanh_layer_b.expr(),
+        last_layer_context_representations = [dynet.tanh(dynet.affine_transform([self.tanh_layer_b.expr(),
                                                                       self.tanh_layer_W.expr(),
                                                                       context])) \
-                                   for context in context_representations]
-        return context_representations
+                                   for context in last_layer_context_representations]
+        return last_layer_context_representations, \
+               multilayered_context_representations[which_layer_to_use_for_morpho_disamb-1]
 
     def predict(self, sentence):
 
-        context_representations = self.get_context_representations(sentence)
+        context_representations_for_ner_loss, context_representations_for_md_loss = \
+            self.get_context_representations(sentence)
 
         last_layer_context_representations, _, _ = \
             self.get_last_layer_context_representations(sentence,
-                                                        context_representations)
+                                                        context_representations_for_ner_loss,
+                                                        context_representations_for_md_loss)
 
-        if self.parameters['active_models'] in [0, 2]:
+        if self.parameters['active_models'] in [0, 2, 3]:
             tag_scores = self.calculate_tag_scores(last_layer_context_representations)
             _, decoded_tags = self.crf_module.viterbi_loss(tag_scores,
                                                               sentence['tag_ids'])
         else:
             decoded_tags = []
 
-        if self.parameters['integration_mode'] in [1, 2] or self.parameters['active_models'] == 1:
+        # if self.parameters['integration_mode'] in [1, 2] or self.parameters['active_models'] == 1:
+        if self.parameters['active_models'] in [1, 2, 3]:
             morph_analysis_representations, morph_analysis_scores = \
                 self.get_morph_analysis_representations_and_scores(sentence,
-                                                                   context_representations)
+                                                                   context_representations_for_md_loss)
 
             selected_morph_analysis_representations = \
                 self.disambiguate_morph_analyzes(morph_analysis_scores)
@@ -556,12 +618,14 @@ class MainTaggerModel(object):
             })
             """
 
-            context_representations = self.get_context_representations(sentence)
+            context_representations_for_ner_loss, context_representations_for_md_loss = \
+                self.get_context_representations(sentence)
 
             last_layer_context_representations, md_loss, _ = \
                 self.get_last_layer_context_representations(sentence,
-                                                            context_representations)
-            if gungor_data and self.parameters['active_models'] in [0, 2]: # 0: NER, 1: MD, 2: JOINT
+                                                            context_representations_for_ner_loss,
+                                                            context_representations_for_md_loss)
+            if gungor_data and self.parameters['active_models'] in [0, 2, 3]: # 0: NER, 1: MD, 2: JOINT, 3: JOINT_MULTILAYER
                 tag_scores = self.calculate_tag_scores(last_layer_context_representations)
 
                 crf_loss = self.crf_module.neg_log_loss(tag_scores, sentence['tag_ids'])
@@ -570,7 +634,7 @@ class MainTaggerModel(object):
                     logging.error("BEEP")
                 loss_array.append(crf_loss)
 
-            if self.parameters['integration_mode'] > 0 or self.parameters['active_models'] in [1, 2]:
+            if self.parameters['active_models'] in [1, 2, 3]:
                 loss_array.append(md_loss)
 
         return dynet.esum(loss_array)
@@ -589,7 +653,12 @@ class MainTaggerModel(object):
                     .get_representation_concat([self.morpho_tag_embeddings[morpho_tag_id] for morpho_tag_id in morpho_tag_sequence])[0]
                 for morpho_tag_sequence in sentence['morpho_tag_ids']]
 
-    def get_context_representations(self, sentence):
+    def get_combined_word_representations(self, sentence):
+        """
+        
+        :param sentence: whole sentence with input values as ids
+        :return: word representations made up according to the user preferences
+        """
 
         representations_to_be_zipped = []
         word_embedding_based_representations = \
@@ -615,9 +684,22 @@ class MainTaggerModel(object):
         # print self.parameters
         combined_word_representations = [dynet.dropout(x, p=self.parameters['dropout'])
                                          for x in combined_word_representations]
-        context_representations = \
-            self.get_sentence_level_bilstm_outputs(combined_word_representations)
-        return context_representations
+
+        return combined_word_representations
+
+    def get_context_representations(self, sentence):
+        """
+        
+        :param sentence: whole sentence with input values as ids
+        :return: context representations for every layer of RNN (Bi-LSTM in our case)
+        """
+
+        combined_word_representations = self.get_combined_word_representations(sentence)
+
+        context_representations_for_ner_loss, context_representations_for_md_loss = \
+            self.get_sentence_level_bilstm_outputs(combined_word_representations,
+                                                   1 if self.parameters['multilayer'] else 1)
+        return context_representations_for_ner_loss, context_representations_for_md_loss
 
     def get_morph_analysis_representations(self, sentence):
 

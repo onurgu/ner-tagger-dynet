@@ -262,7 +262,9 @@ def turkish_lower(s):
 
 
 def prepare_dataset(sentences, word_to_id, char_to_id, tag_to_id,
-                    morpho_tag_to_id, lower=False, morpho_tag_type='wo_root',
+                    morpho_tag_to_id, lower=False,
+                    morpho_tag_dimension=0,
+                    morpho_tag_type='wo_root',
                     morpho_tag_column_index=1):
     """
     Prepare the dataset. Return a list of lists of dictionaries containing:
@@ -284,18 +286,19 @@ def prepare_dataset(sentences, word_to_id, char_to_id, tag_to_id,
         caps = [cap_feature(w) for w in str_words]
         tags = [tag_to_id[w[-1]] for w in s]
 
-        if morpho_tag_type == 'char':
-            str_morpho_tags = [w[morpho_tag_column_index] for w in s]
-            morpho_tags = [[morpho_tag_to_id[c] for c in str_morpho_tag if c in morpho_tag_to_id]
-                 for str_morpho_tag in str_morpho_tags]
-        else:
-            morpho_tags_in_the_sentence = \
-                extract_morpho_tags_from_one_sentence_ordered(morpho_tag_type, [],
-                                                              s, morpho_tag_column_index,
-                                                              joint_learning=False)
+        if morpho_tag_dimension > 0:
+            if morpho_tag_type == 'char':
+                str_morpho_tags = [w[morpho_tag_column_index] for w in s]
+                morpho_tags = [[morpho_tag_to_id[c] for c in str_morpho_tag if c in morpho_tag_to_id]
+                     for str_morpho_tag in str_morpho_tags]
+            else:
+                morpho_tags_in_the_sentence = \
+                    extract_morpho_tags_from_one_sentence_ordered(morpho_tag_type, [],
+                                                                  s, morpho_tag_column_index,
+                                                                  joint_learning=False)
 
-            morpho_tags = [[morpho_tag_to_id[morpho_tag] for morpho_tag in ww if morpho_tag in morpho_tag_to_id]
-                           for ww in morpho_tags_in_the_sentence]
+                morpho_tags = [[morpho_tag_to_id[morpho_tag] for morpho_tag in ww if morpho_tag in morpho_tag_to_id]
+                               for ww in morpho_tags_in_the_sentence]
 
         def f_morpho_tag_to_id(m):
             if m in morpho_tag_to_id:
@@ -354,20 +357,24 @@ def prepare_dataset(sentences, word_to_id, char_to_id, tag_to_id,
                 logging.error("BEEP at golden analysis idx")
             golden_analysis_indices.append(golden_analysis_idx)
 
-        data.append({
+        data_item = {
             'str_words': str_words,
             'word_ids': words,
             'char_for_ids': chars,
             'char_lengths': [len(char) for char in chars],
             'cap_ids': caps,
             'tag_ids': tags,
-            'morpho_tag_ids': morpho_tags,
             'morpho_analyzes_tags': morph_analyzes_tags,
             'morpho_analyzes_roots': morph_analyzes_roots,
             'golden_morph_analysis_indices': golden_analysis_indices,
             'sentence_lengths': len(s),
             'max_word_length_in_this_sample': max([len(x) for x in chars])
-        })
+        }
+        if morpho_tag_dimension > 0:
+            data_item['morpho_tag_ids'] = morpho_tags
+
+        data.append(data_item)
+
     logging.info("Sorting the dataset by sentence length..")
     data_sorted_by_sentence_length = sorted(data, key=lambda x: x['sentence_lengths'])
     stats = [[x['sentence_lengths'],
@@ -440,43 +447,6 @@ def read_an_example(_bucket_data_dict, batch_idx, batch_size_scalar, n_sentences
     #     print ret_dict[key].shape
 
     return given_placeholders, str_words
-
-def _load_and_enqueue(bucket_data_dict, n_batches, batch_size_scalar,
-                      train=True):
-
-    # TODO: shuffle the bucket_data here.
-
-    n_sentences = len(bucket_data_dict["sentence_lengths"])
-
-    if train:
-        new_indices = np.random.permutation(n_sentences)
-
-        print "Reshuffling"
-        for key in bucket_data_dict.keys():
-            if key in ["max_sentence_length", "max_word_length"]:
-                continue
-            if key == "str_words":
-                bucket_data_dict[key] = [bucket_data_dict[key][i] for i in new_indices]
-            elif bucket_data_dict[key].ndim > 1:
-                bucket_data_dict[key] = bucket_data_dict[key][new_indices, :]
-            else:
-                bucket_data_dict[key] = bucket_data_dict[key][new_indices]
-
-    for i in range(n_batches):
-        given_placeholders, str_words = \
-            read_an_example(bucket_data_dict, i, batch_size_scalar, n_sentences)
-
-        given_placeholders['is_train'] = train
-
-        # print given_placeholders
-
-        # data = read_an_example()
-        # print data
-
-        feed_dict = {placeholders[key]: given_placeholders[key] for key in placeholders.keys()}
-
-        sess.run(enqueue_op, feed_dict=feed_dict)
-
 
 def augment_with_pretrained(dictionary, ext_emb_path, words):
     """

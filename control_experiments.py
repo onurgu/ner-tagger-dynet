@@ -38,9 +38,11 @@ def my_config():
 
     integration_mode = 0
     active_models = 0
+    multilayer = 0
+    shortcut_connections = 0
 
-    word_dim = 128
-    word_lstm_dim = 256
+    word_dim = 64
+    word_lstm_dim = 64
     cap_dim = 0
 
     # char_dim = 200
@@ -66,6 +68,7 @@ def my_config():
     yuret_test_filepath = "turkish/test.merge.utf8.gungor_format"
 
     train_with_yuret = 0
+    test_with_yuret = 1
 
     use_golden_morpho_analysis_in_word_representation = 0
 
@@ -101,10 +104,13 @@ def run_a_single_configuration_without_fabric(
                                               yuret_train_filepath,
                                               yuret_test_filepath,
                                               train_with_yuret,
+                                              test_with_yuret,
                                               use_golden_morpho_analysis_in_word_representation,
                                               embeddings_filepath,
                                               integration_mode,
                                               active_models,
+                                              multilayer,
+                                              shortcut_connections,
                                               reload,
                                               dynet_gpu,
                                               _run):
@@ -138,6 +144,8 @@ irect 1 --overwrite-mappings 1 --batch-size 1 --morpho_tag_dim 100 --integration
     always_constant_part = "-T %s/%s " \
           "-d %s/%s " \
           "-t %s/%s " \
+          "%s" \
+          "%s" \
           "--yuret_train %s/%s " \
           "--yuret_test %s/%s " \
           "%s" \
@@ -146,6 +154,8 @@ irect 1 --overwrite-mappings 1 --batch-size 1 --morpho_tag_dim 100 --integration
           "--maximum-epochs %d " % (datasets_root, train_filepath,
                                     datasets_root, dev_filepath,
                                     datasets_root, test_filepath,
+                                    "--train_with_yuret " if train_with_yuret else "",
+                                    "--test_with_yuret " if test_with_yuret else "",
                                     datasets_root, yuret_train_filepath,
                                     datasets_root, yuret_test_filepath,
                                     embeddings_part,
@@ -164,6 +174,8 @@ irect 1 --overwrite-mappings 1 --batch-size 1 --morpho_tag_dim 100 --integration
               "--cap_dim %d "\
               "--integration_mode %d " \
               "--active_models %d " \
+              "--multilayer %d " \
+              "--shortcut_connections %d " \
               "--reload %d" % (crf,
                                lr_method,
                                dropout,
@@ -176,6 +188,8 @@ irect 1 --overwrite-mappings 1 --batch-size 1 --morpho_tag_dim 100 --integration
                                cap_dim,
                                integration_mode,
                                active_models,
+                               multilayer,
+                               shortcut_connections,
                                reload)
 
     # tagger_root = "/media/storage/genie/turkish-ner/code/tagger"
