@@ -168,6 +168,8 @@ irect 1 --overwrite-mappings 1 --batch-size 1 --morpho_tag_dim 100 --integration
               "--char_dim %d " \
               "--char_lstm_dim %d " \
               "--morpho_tag_dim %d " \
+              "--morpho_tag_lstm_dim %d " \
+              "--morpho_tag_type %s " \
               "--morpho-tag-column-index %d " \
               "--word_dim %d " \
               "--word_lstm_dim %d "\
@@ -182,6 +184,8 @@ irect 1 --overwrite-mappings 1 --batch-size 1 --morpho_tag_dim 100 --integration
                                char_dim,
                                char_lstm_dim,
                                morpho_tag_dim,
+                               morpho_tag_lstm_dim,
+                               morpho_tag_type,
                                morpho_tag_column_index,
                                word_dim,
                                word_lstm_dim,
