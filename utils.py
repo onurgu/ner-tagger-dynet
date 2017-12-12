@@ -472,6 +472,11 @@ def read_args(evaluation=False, args_as_a_list=sys.argv[1:]):
         help="Learning method (SGD, Adadelta, Adam..)"
     )
     optparser.add_option(
+        "--disable_sparse_updates", default=True, action="store_false",
+        dest="sparse_updates_enabled",
+        help="Sparse updates enabled"
+    )
+    optparser.add_option(
         "-r", "--reload", default="0",
         type='int', help="Reload the last saved model"
     )
@@ -546,6 +551,7 @@ def form_parameters_dict(opts):
     parameters['crf'] = opts.crf == 1
     parameters['dropout'] = opts.dropout
     parameters['lr_method'] = opts.lr_method
+    parameters['sparse_updates_enabled'] = opts.sparse_updates_enabled
 
     return parameters
 

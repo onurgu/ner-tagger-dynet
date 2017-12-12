@@ -26,6 +26,7 @@ def my_config():
     crf = 1
     # lr_method = "sgd-learning_rate_float@%lf" % learning_rate
     lr_method = "adam"
+    sparse_updates_enabled = 1
     dropout = 0.5
     char_dim = 64
     char_lstm_dim = 64
@@ -88,6 +89,7 @@ def run_a_single_configuration_without_fabric(
                                               datasets_root,
                                               crf,
                                               lr_method,
+                                              sparse_updates_enabled,
                                               dropout,
                                               char_dim,
                                               char_lstm_dim,
@@ -122,6 +124,10 @@ irect 1 --overwrite-mappings 1 --batch-size 1 --morpho_tag_dim 100 --integration
     """
 
     execution_part = "python train.py --overwrite-mappings 1 "
+
+    if sparse_updates_enabled == 0:
+        execution_part += "--disable_sparse_updates "
+
     if dynet_gpu == 1:
         execution_part += "--dynet-gpu 1 "
 

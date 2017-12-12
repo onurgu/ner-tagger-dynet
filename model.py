@@ -519,6 +519,7 @@ class MainTaggerModel(object):
                                  'rmsprop': dynet.RMSPropTrainer}
 
         self.trainer = opt_update_algorithms[opt_update_algorithm](self.model,
+                                                                   sparse_updates_enabled=self.parameters['sparse_updates_enabled'],
                                                                    **{name: value for name, value in opt_hyperparameters})
 
         # self.trainer = dynet.SimpleSGDTrainer(self.model, learning_rate=0.01)
