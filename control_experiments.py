@@ -26,6 +26,9 @@ def my_config():
     crf = 1
     # lr_method = "sgd-learning_rate_float@%lf" % learning_rate
     lr_method = "adam"
+
+    batch_size = 1
+
     sparse_updates_enabled = 1
     dropout = 0.5
     char_dim = 64
@@ -89,6 +92,7 @@ def run_a_single_configuration_without_fabric(
                                               datasets_root,
                                               crf,
                                               lr_method,
+                                              batch_size,
                                               sparse_updates_enabled,
                                               dropout,
                                               char_dim,
@@ -170,6 +174,7 @@ irect 1 --overwrite-mappings 1 --batch-size 1 --morpho_tag_dim 100 --integration
     commandline_args = always_constant_part + \
               "--crf %d " \
               "--lr_method %s " \
+              "--batch-size %d " \
               "--dropout %1.1lf " \
               "--char_dim %d " \
               "--char_lstm_dim %d " \
@@ -186,6 +191,7 @@ irect 1 --overwrite-mappings 1 --batch-size 1 --morpho_tag_dim 100 --integration
               "--shortcut_connections %d " \
               "--reload %d" % (crf,
                                lr_method,
+                               batch_size,
                                dropout,
                                char_dim,
                                char_lstm_dim,

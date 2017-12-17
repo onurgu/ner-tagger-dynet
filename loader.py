@@ -401,7 +401,7 @@ def prepare_dataset(sentences, word_to_id, char_to_id, tag_to_id,
 
         buckets.append(data_to_be_bucketed)
 
-    return buckets, stats, n_unique_words
+    return buckets, stats, n_unique_words, data
 
 def read_an_example(_bucket_data_dict, batch_idx, batch_size_scalar, n_sentences):
     given_placeholders = {}

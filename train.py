@@ -16,7 +16,7 @@ import loader
 from loader import augment_with_pretrained, calculate_global_maxes
 from loader import update_tag_scheme, prepare_dataset
 from loader import word_mapping, char_mapping, tag_mapping, morpho_tag_mapping
-# from model import MainTaggerModel
+
 from model import MainTaggerModel
 from utils import models_path, evaluate, eval_script, eval_temp
 from utils import read_args, form_parameters_dict
@@ -135,32 +135,35 @@ model.reload_mappings()
 
 
 # Index data
-train_buckets, train_stats, train_unique_words = prepare_dataset(
+train_buckets, train_stats, train_unique_words, train_data = prepare_dataset(
     train_sentences, word_to_id, char_to_id, tag_to_id, morpho_tag_to_id,
     lower, parameters['mt_d'], parameters['mt_t'], parameters['mt_ci'],
 )
-dev_buckets, dev_stats, dev_unique_words = prepare_dataset(
+dev_buckets, dev_stats, dev_unique_words, dev_data = prepare_dataset(
     dev_sentences, word_to_id, char_to_id, tag_to_id, morpho_tag_to_id,
     lower, parameters['mt_d'], parameters['mt_t'], parameters['mt_ci'],
 )
-test_buckets, test_stats, test_unique_words = prepare_dataset(
+test_buckets, test_stats, test_unique_words, test_data = prepare_dataset(
     test_sentences, word_to_id, char_to_id, tag_to_id, morpho_tag_to_id,
     lower, parameters['mt_d'], parameters['mt_t'], parameters['mt_ci'],
 )
 
 if parameters['test_with_yuret'] or parameters['train_with_yuret']:
     # yuret train and test datasets
-    yuret_train_buckets, yuret_train_stats, yuret_train_unique_words = prepare_dataset(
+    yuret_train_buckets, yuret_train_stats, yuret_train_unique_words, yuret_train_data = prepare_dataset(
         yuret_train_sentences, word_to_id, char_to_id, tag_to_id, morpho_tag_to_id,
         lower, parameters['mt_d'], parameters['mt_t'], parameters['mt_ci'],
     )
-    yuret_test_buckets, yuret_test_stats, yuret_test_unique_words = prepare_dataset(
+    yuret_test_buckets, yuret_test_stats, yuret_test_unique_words, yuret_test_data = prepare_dataset(
         yuret_test_sentences, word_to_id, char_to_id, tag_to_id, morpho_tag_to_id,
         lower, parameters['mt_d'], parameters['mt_t'], parameters['mt_ci'],
     )
 else:
     yuret_train_buckets = []
     yuret_test_buckets = []
+
+    yuret_train_data = []
+    yuret_test_data = []
 
 print "%i / %i / %i sentences in train / dev / test." % (
     len(train_stats), len(dev_stats), len(test_stats))
@@ -245,64 +248,93 @@ count = 0
 
 model.trainer.set_clip_threshold(5.0)
 
-for epoch in xrange(n_epochs):
+def get_loss_for_a_batch(batch_data,
+                         loss_function=partial(model.get_loss, gungor_data=True),
+                         label="G"):
+
+    loss_value = update_loss(batch_data, loss_function)
+
+    return loss_value
+
+
+def yield_bucket_data(train_buckets):
+    permuted_bucket_ids = np.random.permutation(range(len(train_buckets)))
+
+    for bucket_id in list(permuted_bucket_ids):
+
+        bucket_data = train_buckets[bucket_id]
+
+        yield bucket_id, bucket_data
+
+
+def yield_random_batches(data, batch_size=opts.batch_size):
+    shuffled_data = data[np.random.permutation(range(len(data)))]
+
+    index = 0
+    while index < len(shuffled_data):
+        yield shuffled_data[index:(index+batch_size)]
+        index += batch_size
+
+
+def yield_random_batches_from_bucket_data(train_buckets):
+
+    for bucket_id, bucket_data in yield_bucket_data(train_buckets):
+
+        it_batches = yield_random_batches(bucket_data)
+        while True:
+            try:
+                yield bucket_id, it_batches.next()
+            except StopIteration as e:
+                print e
+
+
+def update_loss(sentences_in_the_batch, loss_function):
+
+    loss = loss_function(sentences_in_the_batch)
+    loss.backward()
+    model.trainer.update()
+    if loss.value() / batch_size >= (10000000000.0 - 1):
+        logging.error("BEEP")
+
+    return loss.value()
+
+for epoch in range(n_epochs):
     start_time = time.time()
     epoch_costs = []
     print "Starting epoch %i..." % epoch
 
-    permuted_bucket_ids = np.random.permutation(range(len(train_buckets)))
-
-    def get_loss_for_bucket_data(bucket_id, bucket_data, count,
-                                 loss_function=partial(model.get_loss, gungor_data=True),
-                                 label="G"):
-        n_batches = int(math.ceil(float(len(bucket_data)) / batch_size))
-
-        print "bucket_id: %d, n_batches: %d" % (bucket_id, n_batches)
-
-        losses_of_this_bucket = []
-
-        for batch_idx in range(n_batches):
-            count += batch_size
-
-            sentences_in_the_batch = bucket_data[(batch_idx*batch_size):((batch_idx+1)*batch_size)]
-
-            loss = loss_function(sentences_in_the_batch)
-            loss.backward()
-            model.trainer.update()
-            if loss.value()/batch_size >= (10000000000.0 - 1):
-                logging.error("BEEP")
-            losses_of_this_bucket.append(loss.value()/batch_size)
-            # epoch_costs.append(loss.value()/batch_size)
-            if count % 50 == 0 and count != 0:
-                sys.stdout.write("%s%f " % (label, np.mean(losses_of_this_bucket[-50:])))
-                sys.stdout.flush()
-                if np.mean(losses_of_this_bucket[-50:]) > 100:
-                    logging.error("BEEP")
-
-        return losses_of_this_bucket
-
     count = 0
     yuret_count = 0
 
-    for bucket_id in list(permuted_bucket_ids):
+    while True:
+        try:
+            if opts.use_buckets:
+                bucket_id, batch_data = yield_random_batches_from_bucket_data(train_buckets)
+                print "bucket_id: %d, len(batch_data): %d" % (bucket_id, len(batch_data))
+            else:
+                _, batch_data = yield_random_batches(train_data)
 
-        # train on gungor_data
-        bucket_data = train_buckets[bucket_id]
+            epoch_costs += get_loss_for_a_batch(batch_data)
+            print ""
 
-
-        epoch_costs += get_loss_for_bucket_data(bucket_id, bucket_data, count)
-        print ""
-
-        if model.parameters['train_with_yuret']:
-            # train on yuret data
-            yuret_bucket_data = yuret_train_buckets[bucket_id]
-
-            epoch_costs += get_loss_for_bucket_data(bucket_id, yuret_bucket_data, yuret_count,
+            if model.parameters["train_with_yuret"]:
+                bucket_id, batch_data = yield_random_batches_from_bucket_data(yuret_train_buckets)
+                epoch_costs += get_loss_for_a_batch(batch_data,
                                      loss_function=partial(model.get_loss, gungor_data=False),
                                      label="Y")
-            print ""
-        model.trainer.status()
+                print ""
 
+            count += len(data)
+
+            model.trainer.status()
+
+            if count % 50 == 0 and count != 0:
+                sys.stdout.write("%s%f " % (label, np.mean(epoch_costs[-50:])))
+                sys.stdout.flush()
+                if np.mean(losses_of_this_bucket[-50:]) > 100:
+                    logging.error("BEEP")
+        except StopIteration as e:
+            print e
     print ""
 
     buckets_to_be_tested = [("dev", dev_buckets),

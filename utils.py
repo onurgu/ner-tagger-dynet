@@ -502,8 +502,12 @@ def read_args(evaluation=False, args_as_a_list=sys.argv[1:]):
         type='int', help="Maximum number of epochs"
     )
     optparser.add_option(
-        "--batch-size", default="5",
+        "--batch-size", default="1",
         type='int', help="Number of samples in one epoch"
+    )
+    optparser.add_option(
+        "--use-buckets", action="store_true", default=False,
+        help="whether to use buckets"
     )
     optparser.add_option(
         "--dynet-gpu", default="1",
@@ -552,6 +556,7 @@ def form_parameters_dict(opts):
     parameters['dropout'] = opts.dropout
     parameters['lr_method'] = opts.lr_method
     parameters['sparse_updates_enabled'] = opts.sparse_updates_enabled
+    parameters['use_buckets'] = opts.use_buckets
 
     return parameters
 
