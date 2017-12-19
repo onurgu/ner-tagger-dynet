@@ -518,8 +518,11 @@ class MainTaggerModel(object):
                                  'momentum': dynet.MomentumSGDTrainer,
                                  'rmsprop': dynet.RMSPropTrainer}
 
+        if opt_update_algorithm == "adam":
+            opt_hyperparameters += [("sparse_updates_enabled", self.parameters['sparse_updates_enabled'])]
+
         self.trainer = opt_update_algorithms[opt_update_algorithm](self.model,
-                                                                   sparse_updates_enabled=self.parameters['sparse_updates_enabled'],
+                                                                   # sparse_updates_enabled=self.parameters['sparse_updates_enabled'],
                                                                    **{name: value for name, value in opt_hyperparameters})
 
         # self.trainer = dynet.SimpleSGDTrainer(self.model, learning_rate=0.01)
