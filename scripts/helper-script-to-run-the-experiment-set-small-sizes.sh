@@ -20,7 +20,8 @@ for trial in `seq 1 ${n_trials}`; do
 		morpho_tag_lstm_dim=$dim \
 		morpho_tag_type=${morpho_tag_type} \
 		word_dim=$dim \
-		word_lstm_dim=$dim "
+		word_lstm_dim=$dim \
+		lr_method=sgd-learning_rate_float@0.100 "
 
 		# experiment_name=${original_experiment_name}-dim-${dim}-morpho_tag_type-${morpho_tag_type}-trial-`printf "%02d" ${trial}`
 		experiment_name=${original_experiment_name}-dim-${dim}-morpho_tag_type-${morpho_tag_type}

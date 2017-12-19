@@ -26,7 +26,7 @@ for trial in `seq 1 ${n_trials}`; do
 		experiment_name=${original_experiment_name}-sgd-sweep
 
 		# for learning_rate in 0.1 0.05 0.01 0.005 0.001 ; do
-		for learning_rate in 0.1 0.15 0.2 0.5 ; do
+		for learning_rate in 0.1 0.05 0.01 0.005 0.001 0.15 0.2 0.5 ; do
 			pre_command="echo ${original_experiment_name}-learning_rate-${learning_rate}-trial-`printf "%02d" ${trial}` >> ${experiment_name}.log"
 			command=${pre_command}" && ""cd ${ner_tagger_root} && \
 			source /usr/local/bin/virtualenvwrapper.sh && workon dynet && \
