@@ -3,7 +3,7 @@ import re
 import numpy as np
 
 import dynet
-from dynet import Model, BiRNNBuilder, LSTMBuilder, CoupledLSTMBuilder
+from dynet import Model, BiRNNBuilder, LSTMBuilder, CoupledLSTMBuilder, ParameterCollection
 
 import codecs
 import cPickle
@@ -18,6 +18,10 @@ logger = logging.getLogger(__name__)
 from utils import get_name, create_a_model_subpath, get_model_subpath, \
     add_a_model_path_to_the_model_paths_database
 
+loss_names2id = {
+    "MD": 0,
+    "CRF": 1
+}
 
 class MainTaggerModel(object):
     """
@@ -33,7 +37,7 @@ class MainTaggerModel(object):
         self.n_bests = 0
         self.overwrite_mappings = overwrite_mappings
 
-        self.model = Model()
+        self.model = ParameterCollection()
 
         if model_path is None:
             assert parameters and models_path
@@ -600,7 +604,7 @@ class MainTaggerModel(object):
         else:
             return decoded_tags
 
-    def get_loss(self, sentences_in_the_batch, gungor_data=True):
+    def get_loss(self, sentences_in_the_batch, which_losses):
         # immediate_compute=True, check_validity=True
         dynet.renew_cg()
         loss_array = []
@@ -629,17 +633,20 @@ class MainTaggerModel(object):
                 self.get_last_layer_context_representations(sentence,
                                                             context_representations_for_ner_loss,
                                                             context_representations_for_md_loss)
-            if gungor_data and self.parameters['active_models'] in [0, 2, 3]: # 0: NER, 1: MD, 2: JOINT, 3: JOINT_MULTILAYER
+            if self.parameters['active_models'] in [0, 2, 3]: # 0: NER, 1: MD, 2: JOINT, 3: JOINT_MULTILAYER
                 tag_scores = self.calculate_tag_scores(last_layer_context_representations)
 
                 crf_loss = self.crf_module.neg_log_loss(tag_scores, sentence['tag_ids'])
 
                 if crf_loss.value() > 1000:
                     logging.error("BEEP")
-                loss_array.append(crf_loss)
+
+                if loss_names2id["CRF"] in which_losses:
+                    loss_array.append(crf_loss)
 
             if self.parameters['active_models'] in [1, 2, 3]:
-                loss_array.append(md_loss)
+                if loss_names2id["MD"] in which_losses:
+                    loss_array.append(md_loss)
 
         return dynet.esum(loss_array)
 

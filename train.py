@@ -249,10 +249,14 @@ count = 0
 
 model.trainer.set_clip_threshold(5.0)
 
+from model import loss_names2id
+
+
 def get_loss_for_a_batch(batch_data,
-                         loss_function=partial(model.get_loss, gungor_data=True),
+                         which_losses,
                          label="G"):
 
+    loss_function = partial(model.get_loss, which_losses=which_losses)
     loss_value = update_loss(batch_data, loss_function)
 
     return loss_value
@@ -268,6 +272,28 @@ def update_loss(sentences_in_the_batch, loss_function):
 
     return loss.value()
 
+
+def train_on_a_given_set_of_samples(train_data, which_losses):
+    # global shuffled_data, index, batch_data
+    shuffled_data = list(train_data)
+    random.shuffle(shuffled_data)
+    count = 0
+    epoch_costs = []
+    index = 0
+    while index < len(shuffled_data):
+        batch_data = shuffled_data[index:(index + batch_size)]
+        epoch_costs += [get_loss_for_a_batch(batch_data, which_losses=which_losses)]
+        count += batch_size
+        index += batch_size
+
+        if count % 50 == 0 and count != 0:
+            sys.stdout.write("%s%f " % ("G", np.mean(epoch_costs[-50:])))
+            sys.stdout.flush()
+            if np.mean(epoch_costs[-50:]) > 100:
+                logging.error("BEEP")
+    return count, epoch_costs
+
+
 for epoch in range(n_epochs):
     start_time = time.time()
     epoch_costs = []
@@ -282,64 +308,27 @@ for epoch in range(n_epochs):
         for bucket_id in list(permuted_bucket_ids):
             bucket_data = train_buckets[bucket_id]
 
-            print "bucket_id: %d, len(batch_data): %d" % (bucket_id, len(batch_data))
+            print("bucket_id: %d, len(bucket_data): %d" % (bucket_id, len(bucket_data)))
 
-            shuffled_data = list(bucket_data)
-            random.shuffle(shuffled_data)
-
-            index = 0
-            while index < len(shuffled_data):
-                batch_data = shuffled_data[index:(index + batch_size)]
-                epoch_costs += [get_loss_for_a_batch(batch_data)]
-                count += batch_size
-                index += batch_size
-
-                if count % 50 == 0 and count != 0:
-                    sys.stdout.write("%s%f " % ("G", np.mean(epoch_costs[-50:])))
-                    sys.stdout.flush()
-                    if np.mean(epoch_costs[-50:]) > 100:
-                        logging.error("BEEP")
-            print ""
+            _count, _epoch_costs = train_on_a_given_set_of_samples(bucket_data,
+                                                                   which_losses=loss_names2id.values())
+            count += _count
+            epoch_costs += _epoch_costs
     else:
-        shuffled_data = list(train_data)
-        random.shuffle(shuffled_data)
+        _count, _epoch_costs = train_on_a_given_set_of_samples(train_data,
+                                                               which_losses=loss_names2id.values())
+        count += _count
+        epoch_costs += _epoch_costs
 
-        index = 0
-        while index < len(shuffled_data):
-            batch_data = shuffled_data[index:(index + batch_size)]
-            epoch_costs += [get_loss_for_a_batch(batch_data)]
-            count += batch_size
-            index += batch_size
-
-            if count % 50 == 0 and count != 0:
-                sys.stdout.write("%s%f " % ("G", np.mean(epoch_costs[-50:])))
-                sys.stdout.flush()
-                if np.mean(epoch_costs[-50:]) > 100:
-                    logging.error("BEEP")
-
-    print ""
+    print("")
 
     if model.parameters["train_with_yuret"]:
-        shuffled_data = list(yuret_train_data)
-        random.shuffle(shuffled_data)
+        _count, _epoch_costs = train_on_a_given_set_of_samples(yuret_train_data,
+                                                               which_losses=[loss_names2id["MD"]])
+        count += _count
+        epoch_costs += _epoch_costs
 
-        index = 0
-        while index < len(shuffled_data):
-            batch_data = shuffled_data[index:(index + batch_size)]
-            epoch_costs += [get_loss_for_a_batch(batch_data,
-                                                loss_function=partial(model.get_loss,
-                                                                      gungor_data=False),
-                                                label="Y")]
-            count += batch_size
-            index += batch_size
-
-            if count % 50 == 0 and count != 0:
-                sys.stdout.write("%s%f " % ("Y", np.mean(epoch_costs[-50:])))
-                sys.stdout.flush()
-                if np.mean(epoch_costs[-50:]) > 100:
-                    logging.error("BEEP")
-
-        print ""
+        print("")
 
     model.trainer.status()
 
@@ -389,6 +378,6 @@ for epoch in range(n_epochs):
                 print("YURET Epoch: %d Best dev and accompanying test score, best_dev, best_test: %lf %lf"
                       % (epoch, 0.0, best_morph_yuret))
 
-    print "Epoch %i done. Average cost: %f" % (epoch, np.mean(epoch_costs))
-    print "MainTaggerModel dir: %s" % model.model_path
-    print "Training took %lf seconds for this epoch" % (time.time()-start_time)
+    print("Epoch %i done. Average cost: %f" % (epoch, np.mean(epoch_costs)))
+    print("MainTaggerModel dir: %s" % model.model_path)
+    print("Training took %lf seconds for this epoch" % (time.time()-start_time))
