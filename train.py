@@ -58,6 +58,9 @@ if not os.path.exists(models_path):
 # TODO: Move this to a better configurational structure
 eval_logs_dir = os.path.join(eval_temp, "eval_logs")
 
+if not os.path.exists(eval_logs_dir):
+    os.makedirs(eval_logs_dir)
+
 if opts.model_path:
     model = MainTaggerModel(parameters=parameters,
                             models_path=models_path,
