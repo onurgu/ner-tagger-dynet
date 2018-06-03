@@ -1,3 +1,4 @@
+import os
 import sys
 import codecs
 
@@ -32,8 +33,12 @@ if __name__ == "__main__":
 
             # self.listWidget_Xoutput_files.addItem("deneme")
 
+            cleaner_files_path = os.path.join(str(QDir.currentPath()), "cleaner_files")
+            if not os.path.exists(cleaner_files_path):
+                os.mkdir(cleaner_files_path)
+
             self.model = QFileSystemModel()
-            self.model.setRootPath(QDir.currentPath())
+            self.model.setRootPath(cleaner_files_path)
 
             self.model.setNameFilters(QStringList(["Xoutput-n_analyses-*.txt"]))
             self.model.setNameFilterDisables(False)
@@ -42,7 +47,7 @@ if __name__ == "__main__":
 
             self.treeView_Xoutput_files.setModel(self.model)
 
-            self.treeView_Xoutput_files.setRootIndex(self.model.index(QDir.currentPath()))
+            self.treeView_Xoutput_files.setRootIndex(self.model.index(cleaner_files_path))
 
             self.treeView_Xoutput_files.setColumnWidth(0, 500)
 
