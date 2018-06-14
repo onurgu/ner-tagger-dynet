@@ -2,6 +2,7 @@
 
 import itertools
 import logging
+import random
 import sys
 import time
 
@@ -43,6 +44,9 @@ assert not parameters['all_emb'] or parameters['pre_emb']
 assert not parameters['pre_emb'] or parameters['word_dim'] > 0
 assert not parameters['pre_emb'] or os.path.isfile(parameters['pre_emb'])
 
+if parameters['train_with_yuret']:
+    parameters['test_with_yuret'] = 1
+
 # Check evaluation script / folders
 if not os.path.isfile(eval_script):
     raise Exception('CoNLL evaluation script not found at "%s"' % eval_script)
@@ -80,8 +84,17 @@ train_sentences, max_sentence_lengths['train'], max_word_lengths['train'] = load
 dev_sentences, max_sentence_lengths['dev'], max_word_lengths['dev'] = loader.load_sentences(opts.dev, lower, zeros)
 test_sentences, max_sentence_lengths['test'], max_word_lengths['test'] = loader.load_sentences(opts.test, lower, zeros)
 
-global_max_sentence_length, global_max_char_length = \
-    calculate_global_maxes(max_sentence_lengths, max_word_lengths)
+if parameters['test_with_yuret'] or parameters['train_with_yuret']:
+    # train.merge and test.merge
+    yuret_train_sentences, max_sentence_lengths['yuret_train'], max_word_lengths['yuret_train'] = \
+        loader.load_sentences(opts.yuret_train, lower, zeros)
+    yuret_test_sentences, max_sentence_lengths['yuret_test'], max_word_lengths['yuret_test'] = \
+        loader.load_sentences(opts.yuret_test, lower, zeros)
+    update_tag_scheme(yuret_train_sentences, tag_scheme)
+    update_tag_scheme(yuret_test_sentences, tag_scheme)
+else:
+    yuret_train_sentences = []
+    yuret_test_sentences = []
 
 # Use selected tagging scheme (IOB / IOBES)
 update_tag_scheme(train_sentences, tag_scheme)
@@ -104,14 +117,16 @@ else:
     dico_words_train = dico_words
 
 # Create a dictionary and a mapping for words / POS tags / tags
-dico_chars, char_to_id, id_to_char = char_mapping(train_sentences + dev_sentences + test_sentences)
-dico_tags, tag_to_id, id_to_tag = tag_mapping(train_sentences + dev_sentences + test_sentences)
-
+dico_chars, char_to_id, id_to_char = \
+    char_mapping(train_sentences + dev_sentences + test_sentences + yuret_train_sentences + yuret_test_sentences)
+dico_tags, tag_to_id, id_to_tag = \
+    tag_mapping(train_sentences + dev_sentences + test_sentences + yuret_train_sentences + yuret_test_sentences)
 if parameters['mt_d'] > 0:
     dico_morpho_tags, morpho_tag_to_id, id_to_morpho_tag = \
-        morpho_tag_mapping(train_sentences + dev_sentences + test_sentences,
+        morpho_tag_mapping(train_sentences + dev_sentences + test_sentences + yuret_train_sentences + yuret_test_sentences,
                            morpho_tag_type=parameters['mt_t'],
-                           morpho_tag_column_index=parameters['mt_ci'])
+                           morpho_tag_column_index=parameters['mt_ci'],
+                           joint_learning=True)
 else:
     id_to_morpho_tag = {}
     morpho_tag_to_id = {}
@@ -124,18 +139,35 @@ model.reload_mappings()
 
 
 # Index data
-train_buckets, train_stats, train_unique_words = prepare_dataset(
+train_buckets, train_stats, train_unique_words, train_data = prepare_dataset(
     train_sentences, word_to_id, char_to_id, tag_to_id, morpho_tag_to_id,
     lower, parameters['mt_d'], parameters['mt_t'], parameters['mt_ci'],
 )
-dev_buckets, dev_stats, dev_unique_words = prepare_dataset(
+dev_buckets, dev_stats, dev_unique_words, dev_data = prepare_dataset(
     dev_sentences, word_to_id, char_to_id, tag_to_id, morpho_tag_to_id,
     lower, parameters['mt_d'], parameters['mt_t'], parameters['mt_ci'],
 )
-test_buckets, test_stats, test_unique_words = prepare_dataset(
+test_buckets, test_stats, test_unique_words, test_data = prepare_dataset(
     test_sentences, word_to_id, char_to_id, tag_to_id, morpho_tag_to_id,
     lower, parameters['mt_d'], parameters['mt_t'], parameters['mt_ci'],
 )
+
+if parameters['test_with_yuret'] or parameters['train_with_yuret']:
+    # yuret train and test datasets
+    yuret_train_buckets, yuret_train_stats, yuret_train_unique_words, yuret_train_data = prepare_dataset(
+        yuret_train_sentences, word_to_id, char_to_id, tag_to_id, morpho_tag_to_id,
+        lower, parameters['mt_d'], parameters['mt_t'], parameters['mt_ci'],
+    )
+    yuret_test_buckets, yuret_test_stats, yuret_test_unique_words, yuret_test_data = prepare_dataset(
+        yuret_test_sentences, word_to_id, char_to_id, tag_to_id, morpho_tag_to_id,
+        lower, parameters['mt_d'], parameters['mt_t'], parameters['mt_ci'],
+    )
+else:
+    yuret_train_buckets = []
+    yuret_test_buckets = []
+
+    yuret_train_data = []
+    yuret_test_data = []
 
 print "%i / %i / %i sentences in train / dev / test." % (
     len(train_stats), len(dev_stats), len(test_stats))
@@ -211,73 +243,155 @@ n_epochs = opts.maximum_epochs  # number of epochs over the training set
 freq_eval = int(len(train_stats)/5)  # evaluate on dev every freq_eval steps
 best_dev = -np.inf
 best_test = -np.inf
+
+if model.parameters['active_models'] in [1, 2, 3]:
+    best_morph_dev = -np.inf
+    best_morph_test = -np.inf
+
 count = 0
 
 model.trainer.set_clip_threshold(5.0)
 
-for epoch in xrange(n_epochs):
+def get_loss_for_a_batch(batch_data,
+                         loss_function=partial(model.get_loss, gungor_data=True),
+                         label="G"):
+
+    loss_value = update_loss(batch_data, loss_function)
+
+    return loss_value
+
+
+def update_loss(sentences_in_the_batch, loss_function):
+
+    loss = loss_function(sentences_in_the_batch)
+    loss.backward()
+    model.trainer.update()
+    if loss.value() / batch_size >= (10000000000.0 - 1):
+        logging.error("BEEP")
+
+    return loss.value()
+
+for epoch in range(n_epochs):
     start_time = time.time()
     epoch_costs = []
     print "Starting epoch %i..." % epoch
 
-    permuted_bucket_ids = np.random.permutation(range(len(train_buckets)))
-
-    def get_loss_for_bucket_data(bucket_id, bucket_data, count,
-                                 loss_function=partial(model.get_loss),
-                                 label="G"):
-        n_batches = int(math.ceil(float(len(bucket_data)) / batch_size))
-
-        print "bucket_id: %d, n_batches: %d" % (bucket_id, n_batches)
-
-        losses_of_this_bucket = []
-
-        for batch_idx in range(n_batches):
-            count += batch_size
-
-            sentences_in_the_batch = bucket_data[(batch_idx*batch_size):((batch_idx+1)*batch_size)]
-
-            loss = loss_function(sentences_in_the_batch)
-            loss.backward()
-            model.trainer.update()
-            if loss.value()/batch_size >= (10000000000.0 - 1):
-                logging.error("BEEP")
-            losses_of_this_bucket.append(loss.value()/batch_size)
-            # epoch_costs.append(loss.value()/batch_size)
-            if count % 50 == 0 and count != 0:
-                sys.stdout.write("%s%f " % (label, np.mean(losses_of_this_bucket[-50:])))
-                sys.stdout.flush()
-                if np.mean(losses_of_this_bucket[-50:]) > 100:
-                    logging.error("BEEP")
-
-        return losses_of_this_bucket
-
     count = 0
     yuret_count = 0
 
-    for bucket_id in list(permuted_bucket_ids):
+    if opts.use_buckets:
+        permuted_bucket_ids = np.random.permutation(range(len(train_buckets)))
 
-        bucket_data = train_buckets[bucket_id]
+        for bucket_id in list(permuted_bucket_ids):
+            bucket_data = train_buckets[bucket_id]
 
-        epoch_costs += get_loss_for_bucket_data(bucket_id, bucket_data, count)
-        print ""
+            print "bucket_id: %d, len(batch_data): %d" % (bucket_id, len(batch_data))
 
-        model.trainer.status()
+            shuffled_data = list(bucket_data)
+            random.shuffle(shuffled_data)
+
+            index = 0
+            while index < len(shuffled_data):
+                batch_data = shuffled_data[index:(index + batch_size)]
+                epoch_costs += [get_loss_for_a_batch(batch_data)]
+                count += batch_size
+                index += batch_size
+
+                if count % 50 == 0 and count != 0:
+                    sys.stdout.write("%s%f " % ("G", np.mean(epoch_costs[-50:])))
+                    sys.stdout.flush()
+                    if np.mean(epoch_costs[-50:]) > 100:
+                        logging.error("BEEP")
+            print ""
+    else:
+        shuffled_data = list(train_data)
+        random.shuffle(shuffled_data)
+
+        index = 0
+        while index < len(shuffled_data):
+            batch_data = shuffled_data[index:(index + batch_size)]
+            epoch_costs += [get_loss_for_a_batch(batch_data)]
+            count += batch_size
+            index += batch_size
+
+            if count % 50 == 0 and count != 0:
+                sys.stdout.write("%s%f " % ("G", np.mean(epoch_costs[-50:])))
+                sys.stdout.flush()
+                if np.mean(epoch_costs[-50:]) > 100:
+                    logging.error("BEEP")
 
     print ""
-    f_scores = eval_with_specific_model(model, epoch, dev_buckets, test_buckets,
+
+    if model.parameters["train_with_yuret"]:
+        shuffled_data = list(yuret_train_data)
+        random.shuffle(shuffled_data)
+
+        index = 0
+        while index < len(shuffled_data):
+            batch_data = shuffled_data[index:(index + batch_size)]
+            epoch_costs += [get_loss_for_a_batch(batch_data,
+                                                loss_function=partial(model.get_loss,
+                                                                      gungor_data=False),
+                                                label="Y")]
+            count += batch_size
+            index += batch_size
+
+            if count % 50 == 0 and count != 0:
+                sys.stdout.write("%s%f " % ("Y", np.mean(epoch_costs[-50:])))
+                sys.stdout.flush()
+                if np.mean(epoch_costs[-50:]) > 100:
+                    logging.error("BEEP")
+
+        print ""
+
+    model.trainer.status()
+
+    buckets_to_be_tested = [("dev", dev_buckets),
+                            ("test", test_buckets)]
+    if model.parameters['test_with_yuret']:
+        buckets_to_be_tested.append(("yuret", yuret_test_buckets))
+
+    f_scores, morph_accuracies = eval_with_specific_model(model, epoch, buckets_to_be_tested,
+                                        model.parameters['integration_mode'],
+                                        model.parameters['active_models'],
                                         id_to_tag, batch_size,
                                         eval_logs_dir,
-                                        tag_scheme)
-    if best_dev < f_scores["dev"]:
-        logging.info("New best dev score => best_dev, best_test: %lf %lf" % (f_scores["dev"], f_scores["test"]))
-        best_dev = f_scores["dev"]
-        best_test = f_scores["test"]
-        model.save(epoch)
-        model.save_best_performances_and_costs(epoch,
-                                               best_performances=[f_scores["dev"], f_scores["test"]],
-                                               epoch_costs=epoch_costs)
-    else:
-        logging.info("Best dev and accompanying test score, best_dev, best_test: %lf %lf" % (best_dev, best_test))
+                                        tag_scheme
+                                        )
+    if model.parameters['active_models'] in [0, 2, 3]:
+        if best_dev < f_scores["dev"]:
+            print("NER Epoch: %d New best dev score => best_dev, best_test: %lf %lf" % (epoch + 1,
+                                                                                               f_scores["dev"],
+                                                                                               f_scores["test"]))
+            best_dev = f_scores["dev"]
+            best_test = f_scores["test"]
+            model.save(epoch)
+            model.save_best_performances_and_costs(epoch,
+                                                   best_performances=[f_scores["dev"], f_scores["test"]],
+                                                   epoch_costs=epoch_costs)
+        else:
+            print("NER Epoch: %d Best dev and accompanying test score, best_dev, best_test: %lf %lf" % (epoch + 1,
+                                                                                                       best_dev,
+                                                                                                       best_test))
+
+    if model.parameters['active_models'] in [1, 2, 3]:
+        if best_morph_dev < morph_accuracies["dev"]:
+            print("MORPH Epoch: %d New best dev score => best_dev, best_test: %lf %lf" %
+                  (epoch, morph_accuracies["dev"], morph_accuracies["test"]))
+            best_morph_dev = morph_accuracies["dev"]
+            best_morph_test = morph_accuracies["test"]
+            if parameters['test_with_yuret']:
+                best_morph_yuret = morph_accuracies["yuret"]
+                print("YURET Epoch: %d New best dev score => best_dev, best_test: %lf %lf" %
+                      (epoch, 0.0, morph_accuracies["yuret"]))
+                # we do not save in this case, just reporting
+        else:
+            print("MORPH Epoch: %d Best dev and accompanying test score, best_dev, best_test: %lf %lf"
+                  % (epoch, best_morph_dev, best_morph_test))
+            if parameters['test_with_yuret']:
+                print("YURET Epoch: %d Best dev and accompanying test score, best_dev, best_test: %lf %lf"
+                      % (epoch, 0.0, best_morph_yuret))
+
     print "Epoch %i done. Average cost: %f" % (epoch, np.mean(epoch_costs))
     print "MainTaggerModel dir: %s" % model.model_path
     print "Training took %lf seconds for this epoch" % (time.time()-start_time)
