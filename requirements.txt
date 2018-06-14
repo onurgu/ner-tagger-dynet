@@ -1,1 +1,4 @@
 numpy==1.12.0
+virtualenvwrapper==4.7.2
+pymongo==3.4.0
+sacred==0.7.0

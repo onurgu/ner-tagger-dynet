@@ -351,6 +351,26 @@ def read_args(evaluation=False, args_as_a_list=sys.argv[1:]):
         help="Test set location"
     )
     optparser.add_option(
+        "--yuret_train", default="",
+        help="yuret train set location"
+    )
+    optparser.add_option(
+        "--yuret_test", default="",
+        help="yuret test set location"
+    )
+    optparser.add_option(
+        "--train_with_yuret", default=False, action="store_true",
+        help="train with yuret training set"
+    )
+    optparser.add_option(
+        "--test_with_yuret", default=False, action="store_true",
+        help="test with yuret training set"
+    )
+    optparser.add_option(
+        "--use_golden_morpho_analysis_in_word_representation", default=False, action="store_true",
+        help="use golden morpho analysis when representing words"
+    )
+    optparser.add_option(
         "-s", "--tag_scheme", default="iobes",
         help="Tagging scheme (IOB or IOBES)"
     )
@@ -376,7 +396,7 @@ def read_args(evaluation=False, args_as_a_list=sys.argv[1:]):
     )
     # morpho_tag section
     optparser.add_option(
-        "--morpho_tag_dim", default="0",
+        "--morpho_tag_dim", default="100",
         type='int', help="Morpho tag embedding dimension"
     )
     optparser.add_option(
@@ -394,6 +414,26 @@ def read_args(evaluation=False, args_as_a_list=sys.argv[1:]):
     optparser.add_option(
         "--morpho-tag-column-index", default="1",
         type='int', help="the index of the column which contains the morphological tags in the conll format"
+    )
+    optparser.add_option(
+        "--integration_mode", default="0",
+        type='int', help="integration mode"
+    )
+    optparser.add_option(
+        "--active_models", default="0",
+        type='int', help="active models: 0: NER, 1: MD, 2: JOINT"
+    )
+    optparser.add_option(
+        "--multilayer", default="0",
+        type='int', help="use a multilayered sentence level Bi-LSTM"
+    )
+    optparser.add_option(
+        "--shortcut_connections", default="0",
+        type='int', help="use shortcut connections in the multilayered scheme"
+    )
+    optparser.add_option(
+        "--tying_method", default="",
+        help="tying method"
     )
     optparser.add_option(
         "-w", "--word_dim", default="100",
@@ -432,6 +472,11 @@ def read_args(evaluation=False, args_as_a_list=sys.argv[1:]):
         help="Learning method (SGD, Adadelta, Adam..)"
     )
     optparser.add_option(
+        "--disable_sparse_updates", default=True, action="store_false",
+        dest="sparse_updates_enabled",
+        help="Sparse updates enabled"
+    )
+    optparser.add_option(
         "-r", "--reload", default="0",
         type='int', help="Reload the last saved model"
     )
@@ -461,6 +506,10 @@ def read_args(evaluation=False, args_as_a_list=sys.argv[1:]):
         type='int', help="Number of samples in one epoch"
     )
     optparser.add_option(
+        "--use-buckets", action="store_true", default=False,
+        help="whether to use buckets"
+    )
+    optparser.add_option(
         "--dynet-gpu", default="1",
         type='int', help="Use gpu or not"
     )
@@ -486,6 +535,16 @@ def form_parameters_dict(opts):
     parameters['mt_d'] = opts.morpho_tag_dim
     parameters['mt_t'] = opts.morpho_tag_type
     parameters['mt_ci'] = opts.morpho_tag_column_index
+    parameters['integration_mode'] = opts.integration_mode
+    parameters['active_models'] = opts.active_models
+
+    parameters['multilayer'] = opts.multilayer
+    parameters['shortcut_connections'] = opts.shortcut_connections
+
+    parameters['tying_method'] = opts.tying_method
+    parameters['train_with_yuret'] = opts.train_with_yuret
+    parameters['test_with_yuret'] = opts.test_with_yuret
+    parameters['use_golden_morpho_analysis_in_word_representation'] = opts.use_golden_morpho_analysis_in_word_representation
 
     parameters['word_dim'] = opts.word_dim
     parameters['word_lstm_dim'] = opts.word_lstm_dim
@@ -496,6 +555,8 @@ def form_parameters_dict(opts):
     parameters['crf'] = opts.crf == 1
     parameters['dropout'] = opts.dropout
     parameters['lr_method'] = opts.lr_method
+    parameters['sparse_updates_enabled'] = opts.sparse_updates_enabled
+    parameters['use_buckets'] = opts.use_buckets
 
     return parameters
 
