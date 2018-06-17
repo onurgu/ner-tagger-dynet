@@ -65,7 +65,7 @@ class CRF():
             max_score_expr = dynet.pick(scores, argmax_score)
             max_score_expr_broadcast = dynet.concatenate([max_score_expr] * (self.n_tags+2))
             return max_score_expr + dynet.log(
-                dynet.sum_cols(dynet.transpose(dynet.exp(scores - max_score_expr_broadcast))))
+                dynet.sum_dims(dynet.transpose(dynet.exp(scores - max_score_expr_broadcast)), [1]))
 
         init_alphas = [-1e10] * (self.n_tags + 2)
         init_alphas[self.b_id] = 0
