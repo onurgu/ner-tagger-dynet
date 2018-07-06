@@ -1,4 +1,6 @@
 
+See updated version at http://github.com/onurgu/joint-ner-and-md-tagger
+
 # Neural Tagger for MD and NER
 
 This repo contains the software that was used to conduct the experiments reported
